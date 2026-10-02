@@ -7,7 +7,7 @@
 	"authors": [
 		"Ay2E47"
 	],
-	"license": "CC0-1.0",
+	"license": "MIT",
 	"icon": "assets/resourcemanager/icon.png",
 	"environment": "*",
 	"entrypoints": {

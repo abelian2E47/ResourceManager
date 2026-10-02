@@ -1,155 +1,235 @@
 # ResourceManager
 
-在游戏内直接调试资源包的 Fabric 客户端模组（Minecraft 1.21.4 / Fabric Loader）。
+**An in-game resource pack debugger for Minecraft 1.21.4 (Fabric).**
 
-按 **F8**（可在「选项 → 控制」里改键）打开 GUI：像文件管理器一样浏览所有已启用的资源包，把某个包里
-不想要的贴图 / 模型 / 声音直接禁用掉，让加载顺序更靠前的资源包覆盖它；也可以直接调 `sounds.json`
-里每个音效事件的音量与音高并当场试听；还能直接修改原版/资源包里的文本（`lang` 键值），改完立刻在游戏里生效。
+Open it with **F8**, browse every enabled pack as a file-manager style tree, and switch off a single
+texture, model, sound or UI sprite: that pack stops providing the one file and the next pack in the
+load order takes over. You can also tune the volume and pitch of any `sounds.json` event and hear it
+right away, preview the texture you are about to touch, and edit `lang` keys so the new text shows up
+in game immediately. Everything you change lives in one config file and survives a restart.
 
-## 界面
+[中文说明](README.zh_cn.md) · [Report an issue](https://github.com/abelian2E47/ResourceManager/issues)
+
+![The GUI: filters and disabled list on the left, the resource tree in the middle, the inspector on the right](docs/screenshot-overview.png)
+
+## Highlights
+
+- **File manager layout** — toolbar / sidebar / tree / inspector / status bar are separate panels.
+  When the window gets too narrow the sidebar folds itself away instead of overlapping anything.
+- **Hierarchical tree** — pack → namespace → directory → file, with a file count per node, the number
+  of disabled files (`off`) and `♪` markers for `sounds.json` events.
+- **Search & categories** — filter by pack, namespace, path or file name (matching branches expand
+  themselves and the header shows `hits / total`), or narrow the tree down to
+  Textures / Sounds / UI / Models / Text / Other.
+- **Disable one resource** — the pack stops serving that file, so the next pack in the fallback chain
+  provides it. The inspector lists the other packs that ship the same file. Batch disable works on
+  pack / namespace / directory nodes, with a click-again confirmation.
+- **Sound tuning** — 0–4× volume and pitch per `sounds.json` event, applied to the real playback, and
+  a **Play** button that tells you whether the sound actually started (and why not, if it did not).
+- **Texture preview** — the inspector renders the selected image at an integer scale, with its real
+  size next to it, using the pack that owns the file.
+- **Text editing** — edit any `lang` key and see the change in game at once, including text that was
+  already drawn; **Revert** drops the override and the pack's own text comes back.
+- **Full screen disabled view** — the "Full" button in the DISABLED panel turns the sidebar list into
+  a two-column window-wide view with mouse and keyboard navigation.
+
+## Screenshots
+
+| | |
+| --- | --- |
+| ![Search](docs/screenshot-search.png) | ![Full screen disabled list](docs/screenshot-disabled-full.png) |
+| Filtering the tree with a search query | The DISABLED panel expanded to the whole window |
+| ![Sound tuning](docs/screenshot-sound.png) | ![Text editor](docs/screenshot-text-editor.png) |
+| Tuning a sound event, with Play on the right | Editing a `lang` key of a pack (or of vanilla) |
+| ![Texture preview](docs/screenshot-texture-preview.png) | |
+| Previewing a texture that a pack overrides | |
+
+## Requirements
+
+| | |
+| --- | --- |
+| Minecraft | 1.21.4 |
+| Fabric Loader | 0.16.14 or newer |
+| Fabric API | required |
+| Java | 21 |
+| Environment | client side; safe to use on a server-connected client, everything it does is local |
+
+## Install
+
+1. Install [Fabric Loader](https://fabricmc.net/use/installer/) and put
+   [Fabric API](https://modrinth.com/mod/fabric-api) in `mods/`.
+2. Drop `resourcemanager-1.0.0.jar` from [Releases](../../releases) into `.minecraft/mods/`.
+3. Start the game and press **F8** (rebindable in *Options → Controls → Resource Manager*).
+
+## Using it
 
 ```
-┌ 工具栏  标题 · 搜索框 · 侧栏开关 · 重载资源包 · 关闭 ─────────────────────┐
+┌ toolbar   title · search · sidebar · reload packs · close ────────────────┐
 ├──────────────┬──────────────────────────────┬────────────────────────────┤
-│ 过滤器       │ 资源树                       │ 检查器                     │
-│  全部        │  ▾ 资源包            #2 1 off │  名称                      │
-│  贴图        │    ▾ 命名空间        554 off  │  命名空间:路径             │
-│  声音        │      ▾ 目录                   │  所属资源包 / 类型 / 状态  │
-│  UI          │        • 文件        ♪ 事件   │  ┌────────┐ 贴图预览       │
-│  模型/文本/  │                              │  │ 16x16  │ 16x16          │
-│  其它        │                              │  └────────┘                │
-│ 已禁用 (3) 全屏│                             │  覆盖来源（provider 列表） │
-│  列表        │                              │  音量 ▬▬▬▬▬ 1.00           │
-│ [清空全部]   │                              │  音高 ▬▬▬▬▬ 1.00           │
-│              │                              │  [重置]      [试听]        │
+│ FILTERS      │ RESOURCE TREE                │ INSPECTOR                  │
+│  All         │  ▾ pack                #2 off│  name                      │
+│  Textures    │    ▾ namespace       554  off│  namespace:path            │
+│  Sounds      │      ▾ directory             │  pack / type / state       │
+│  UI          │        • file         ♪ event│  ┌────────┐ texture preview│
+│  Models      │                              │  │ 16x16  │ 16x16          │
+│  Text        │                              │  └────────┘                │
+│  Other       │                              │  providers (load order)    │
+│ DISABLED (3) │                              │  volume ▬▬▬▬▬ 1.00         │
+│  list  [Full]│                              │  pitch  ▬▬▬▬▬ 1.00         │
+│ [Clear all]  │                              │  [Reset]      [Play]       │
 ├──────────────┴──────────────────────────────┴────────────────────────────┤
-│ 状态栏  25142 files · 58 packs · 1669 sound events · 3 disabled │ 提示     │
+│ status  25142 files · 58 packs · 1669 sound events · 3 disabled │ hints   │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
-窗口太窄时侧栏自动收起（点工具栏上的「侧栏」按钮可再打开），树与检查器始终并排、互不重叠。
+**Disabling.** Select a file and press `Enter` (or *Disable resource*). "Disabled" means *this pack no
+longer provides that file*: the fallback chain keeps walking, so the next pack further down the pack
+list serves it. That is also the point of the tool — disable the topmost pack's copy of a texture and
+the copy from every pack below it becomes visible again. The inspector's **State** line spells out the
+current situation (`Active (this pack wins)`, `Shadowed by …`, `Disabled (lower packs can provide it)`)
+and **Next provider** jumps to the next pack that ships the same file.
 
-三个面板各有分工，只有需要的时候才出现对应的控件：
+**Where the changes go.** Nothing is written into the resource packs themselves. Everything is stored
+in `config/resourcemanager.json`, re-applied on startup and re-read whenever you press *Reload packs*.
 
-- **侧栏**：分类过滤 + 已禁用列表（点标题栏的「全屏」按钮可把它铺满整个内容区，见下）。
-- **中间**：资源树。选中什么就检查什么。
-- **右侧检查器**：随选中项切换形态 —— 文件 → 信息 + 贴图预览 + 禁用按钮；音效事件 → 音量/音高滑条
-  + 试听；`lang` 文件 → 文本编辑器。
+### Full screen disabled view
 
-### 已禁用列表的全屏视图
+The DISABLED panel has a **Full** button that spreads the list over the whole content area:
 
-侧栏里「已禁用 (n)」标题栏右侧有一个「全屏」按钮，点开后整块内容区都变成禁用列表：
+![Full screen disabled list](docs/screenshot-disabled-full.png)
 
-```
-┌ 已禁用 (3)                        [全部清除] [返回] ──────────────────────┐
-│ Squareful 方纹v3.8 …   minecraft:textures/block/redstone_block.png        │
-│ Squareful 方纹v3.8 …   minecraft:textures/gui/widgets.png                 │
-│ CozyUI+ v1.10 …        minecraft:textures/gui/sprites/hud/heart.png       │
-└──────────────────────────────────────────────────────────────────────────┘
-```
+Rows are split into `pack | resource` columns, a single click jumps to the entry in the tree, a double
+click (or `Enter`) restores it, the toolbar search box filters the list, and `ESC` returns to the
+three-panel view without closing the GUI.
 
-行内分成「资源包 | 资源」两列便于扫读，单击跳到该文件，双击（或选中后按 `Enter`）直接恢复，
-工具栏的搜索框此时会过滤列表，`ESC` 返回三面板视图（不会关掉 GUI）。侧栏太窄放不下列表时，
-全屏按钮依然可用（它只依赖侧栏本身）。
+### Sound tuning
 
-### 文本编辑（原版文本也是资源）
+Select an event under `sounds.json` (`♪` rows) and drag the volume / pitch sliders — 0–4×, with the
+mouse wheel as a 0.05 fine adjustment. **Play** previews the event relative to the listener and
+without attenuation, and reports the outcome in the status bar: `Playing minecraft:block.bamboo.step`
+when it really started, or the reason when it could not (`is not provided by the loaded sounds.json`,
+`has no usable sound file`, `is marked intentionally silent`). **Reset** goes back to 1.00 / 1.00.
+Your values are multiplied into the real sound playback, so in-game audio changes immediately.
 
-任意 `lang/*.json` 都是一棵树节点（过滤到「文本」分类或直接搜 `en_us.json`）。选中它，检查器就变成
-文本编辑器：上面一行是键过滤框，中间是该文件所有文本键（有改动的键右边带 ✎），点一行即可编辑，
-下面填新文本并点「应用」——游戏内所有引用这个键的文本立刻变成新值（连已经渲染过的缓存文本也会刷新）。
-「还原」移除该键的覆盖，恢复资源包原本的文本。
+### Texture preview
 
-## 能做什么
+Any image file renders in the inspector above its metadata, scaled by an integer factor (never
+blurred, up to 6×) and labelled with its source size. The pixels come from the pack that owns the
+file, so you can look at a copy that is currently shadowed by a pack above it.
 
-- **层级资源树**：资源包 → 命名空间 → 目录 → 文件。`▾/▸` 展开折叠，右侧徽标是该节点下的文件数，
-  `off` 表示其中已被禁用的数量，`♪` 是 `sounds.json` 里的音效事件。
-- **搜索**：按资源包名 / 命名空间 / 路径 / 文件名过滤，命中的分支自动展开，并显示「命中 / 总数」。
-- **分类过滤**：全部 / 贴图 / 声音 / UI / 模型 / 文本 / 其它。
-- **禁用单个资源**：选中文件后按 `Enter` 或点「禁用」。禁用的含义是「这个包不再提供该文件」，
-  回退链继续往下走 —— 也就是交给加载顺序更靠前的包（检查器里会列出还有哪些包提供同一文件）。
-  在资源包 / 命名空间 / 目录节点上是批量禁用，需要点两次确认。
-- **音效调试**：选中 `sounds.json` 下的事件后拖滑条调音量 / 音高（0–4 倍，滚轮可 0.05 微调），
-  「试听」立即播放，「重置」恢复默认；改动立刻影响游戏内的音效播放。
-  试听是**相对声源、无衰减**的，而且会告诉你到底有没有响：状态栏显示「正在播放 xxx」，
-  若事件解析不出来（被更高优先级包的 `sounds.json` 覆盖、文件缺失、被标记为静音）会直接写明原因，
-  而不是像以前那样静默失败。
-- **贴图预览**：选中任意图片文件，检查器顶部按整数倍放大渲染该文件的贴图（像素画不会被糊掉），
-  并标出原始尺寸；像素来自该文件所属的资源包，所以「已被覆盖」的文件也能看到它自己的图。
-- **文本编辑**：见上，可改原版文本并即时生效，改动存在配置里，重启后依然生效。
-- **重载**：状态栏提示「N 项待应用」时点「重载资源包」，贴图 / 模型 / 声音改动立刻生效。
-- 结果持久化在 `config/resourcemanager.json`（`disabled` + `sounds` + `texts` 三张表），重启后仍然有效。
+### Text editing
 
-## 键盘 / 鼠标
+Every `lang/*.json` is a node in the tree (filter to *Text* or just search `en_us.json`). Select it and
+the inspector becomes a text editor: a key filter on top, the keys of that file in the middle (edited
+keys carry a ✎), and a value box with **Apply** / **Revert** at the bottom.
 
-| 操作 | 说明 |
+![Text editor](docs/screenshot-text-editor.png)
+
+Applied text takes effect at once for every place that uses the key, including components that were
+already rendered. **Revert** removes the override so the pack (or vanilla) text is used again.
+
+## Keyboard & mouse
+
+| Input | Action |
 | --- | --- |
-| `F8` | 打开 / 关闭 GUI |
-| 单击 | 选中行（已禁用列表：跳到该文件） |
-| 双击 / `→` | 展开节点（文件则切换禁用）；已禁用列表里双击 = 恢复 |
-| `←` | 折叠节点，已在最外层则回到父节点 |
-| `↑` `↓` | 移动选择（自动滚动到可见）；全屏禁用列表里同样是移动高亮 |
-| `Enter` | 切换选中项的禁用状态；全屏禁用列表里 = 恢复选中项 |
-| `ESC` | 关闭 GUI；全屏禁用列表里先返回三面板视图 |
-| 搜索框内 `↓` / `Enter` / `Tab` | 结束输入，把焦点交给资源树 |
-| 键过滤框内 `↓` / `Enter` | 结束输入，选中第一条文本键 |
-| 文本值框内 `Enter` | 应用这条文本改动 |
-| 滚轮 | 列表滚动；指针在滑条上时微调数值 |
-| 拖动滚动条 | 快速跳转 |
+| `F8` | Open / close the GUI |
+| single click | Select a row (in the disabled list: jump to that file) |
+| double click / `→` | Expand a node (on a file: toggle disabled); in the disabled list: restore the entry |
+| `←` | Collapse a node, or fold back to its parent |
+| `↑` / `↓` | Move the selection (scrolls into view); in the full screen list: move the highlight |
+| `Enter` | Toggle disabled on the selection; in the full screen list: restore the selection |
+| `ESC` | Close the GUI; in the full screen list: go back to the three-panel view |
+| `↓` / `Enter` / `Tab` in the search box | Leave the box and hand the keyboard to the tree |
+| `↓` / `Enter` in the key filter | Leave the box and select the first key |
+| `Enter` in the value box | Apply that text edit |
+| mouse wheel | Scroll a list; over a slider, fine-tune the value |
+| drag the scrollbar | Jump through a long list |
 
-## 工作原理
+## Config file
 
-| 模块 | 作用 |
+`config/resourcemanager.json`:
+
+```json
+{
+  "disabled": [
+    "Squareful 方纹v3.8 for MC 1.20.2~1.21.8.zip|minecraft:textures/block/redstone_block.png"
+  ],
+  "sounds": {
+    "minecraft:block.note_block.harp": {
+      "volume": 1.5,
+      "pitch": 0.8
+    }
+  },
+  "texts": {
+    "mco.notification.transferSubscription.buttonText": "My own label"
+  }
+}
+```
+
+- `disabled` — `packId|resourceLocation`, where `packId` is the pack folder/file name (the `file/`
+  prefix the game adds is stripped, so the entries stay readable and portable).
+- `sounds` — per sound event multiplier; an entry equal to `1.0 / 1.0` is dropped again.
+- `texts` — `lang` key overrides; an empty value removes the override.
+
+The file is rewritten only when something actually changed.
+
+## How it works
+
+| Module | Role |
 | --- | --- |
-| `ResourceIndex` | 从运行时 `ResourceManager` 建索引：按加载顺序列举资源、解析 `sounds.json` 事件、记录每个 location 的 provider 链，并保留 packId → `PackResources` 映射供按包读文件 |
-| `ResourceNode` / `ResourceTree` | 树节点模型与「扁平化成行 + 搜索/过滤 + 展开状态」 |
-| `ui/`（`Ui` `TreeView` `ScrollList` `UiButton` `UiSlider` `DisabledList` `TextKeyList` `PreviewTexture`） | 面板配色与几何、可滚动列表、树视图、滑条、禁用列表、文本键列表、贴图预览 |
-| `ResourceManagerScreen` | 三段式布局（工具栏 / 侧栏+树+检查器 / 状态栏）、随选中项切换的检查器、全屏禁用列表、文本编辑器、输入处理 |
-| `LangText` | 按包读 `lang/*.json`、列出键值、查当前生效文本 |
-| `SoundPreview` | 判定音效事件能否播放（未知 / 空 / 故意静音）并构造试听用的 `SoundInstance` |
-| `mixins/FallbackResourceManagerMixin` | 包装每个 pack：被禁用的文件在该包里直接不出现，回退链自然落到下一个包 |
-| `mixins/SoundInstanceMixin` | 按音效事件 id 乘算音量 / 音高 |
-| `mixins/ClientLanguageMixin` | `ClientLanguage.getOrDefault/has` 优先返回文本覆盖值 |
-| `mixins/TranslatableContentsMixin` | 文本改动后让已缓存的 `TranslatableContents` 重新解析，从而即时生效 |
-| `ResourceManagerConfig` | 读写 `config/resourcemanager.json`（`disabled` / `sounds` / `texts`），packId 归一化（去掉 `file/` 前缀） |
+| `ResourceIndex` | Builds the model from the live `ResourceManager`: walks resources in load order, parses `sounds.json`, records the provider chain of every location and keeps a packId → `PackResources` map so files can be read per pack |
+| `ResourceNode` / `ResourceTree` | Tree nodes (pack / namespace / directory / file / sound event) and the flattening into rows with search, category filter and expansion state |
+| `ui/` (`Ui` `TreeView` `ScrollList` `UiButton` `UiSlider` `DisabledList` `TextKeyList` `PreviewTexture`) | Panel colours and geometry, scrollable lists, the tree view, sliders, the disabled list, the text key list and the texture preview |
+| `ResourceManagerScreen` | Layout (toolbar / sidebar + tree + inspector / status bar), the inspector that changes shape with the selection, the full screen disabled list, the text editor and all input handling |
+| `LangText` | Reads `lang/*.json` per pack, lists keys and resolves the text that is currently in effect |
+| `SoundPreview` | Decides whether a sound event can be played (unknown / empty / intentionally silent) and builds the preview instance |
+| `mixins/FallbackResourceManagerMixin` | Wraps every pack so a disabled file simply does not exist in it; the fallback chain then lands on the next pack |
+| `mixins/SoundInstanceMixin` | Multiplies volume and pitch per sound event id |
+| `mixins/ClientLanguageMixin` | `ClientLanguage.getOrDefault` / `has` return the text override first |
+| `mixins/TranslatableContentsMixin` | Invalidates the cached `decomposedWith` of translated components so an edited text appears immediately |
+| `ResourceManagerConfig` | Reads and writes `config/resourcemanager.json`, normalises pack ids, reports a version so the UI can refresh |
 
-### 1.21.4 API 上的几个坑（代码内有注释）
+### Gotchas on the 1.21.4 API (the code has comments about them)
 
-1. `ResourceManager.listResources(path, …)` **拒绝空路径**（`FileUtil.decomposePath` 只接受真实路径段），
-   因此一个命名空间无法一次列完。索引的做法是：列举一组已知 asset 根目录 + 从 `resourcepacks/`
-   里扫描出来的根目录，再单独探测 `sounds.json` 这类命名空间根文件。
-2. `AbstractWidget.setRectangle` 的参数顺序实际是 `(width, height, x, y)`，与形参名相反，用它定位会
-   「宽高与坐标互换」。所有控件都经过 `Ui.place(widget, x, y, w, h)` 定位。
-3. `Screen.render` 会先铺一次背景，若在子类里调用 `super.render` 它会把自绘的面板盖掉；这里改成手动
-   遍历 `children()` 绘制控件。
-4. `GuiGraphics.blit` 只接受 `Function<ResourceLocation, RenderType>` 作为首参，贴图预览用
-   `RenderType::guiTextured` 走 GUI 着色器。
-5. 文本覆盖要同时处理两条路径：`ClientLanguage.getOrDefault/has`（新解析的文本）与
-   `TranslatableContents.decomposedWith` 缓存（已经渲染过的组件），所以另有一个 mixin 在版本号变化时
-   把它置空。
+1. `ResourceManager.listResources(path, …)` **rejects empty paths** (`FileUtil.decomposePath` only
+   accepts real path segments), so a namespace cannot be listed in one call. The index instead walks a
+   set of well-known asset roots plus the roots found in `resourcepacks/`, and probes namespace-root
+   files such as `sounds.json` separately.
+2. `AbstractWidget.setRectangle` takes `(width, height, x, y)` — the opposite of its parameter names,
+   so using it directly swaps position and size. Every widget is placed through
+   `Ui.place(widget, x, y, w, h)`.
+3. `Screen.render` paints the background again, so calling `super.render` from a subclass wipes custom
+   panels. This screen draws its children through `children()` itself.
+4. `GuiGraphics.blit` only accepts a `Function<ResourceLocation, RenderType>` as its first argument;
+   the preview uses `RenderType::guiTextured` to go through the GUI shader.
+5. A text override has to cover two paths: `ClientLanguage.getOrDefault` / `has` for freshly parsed
+   text, and the `TranslatableContents.decomposedWith` cache for components that were already drawn —
+   hence the second mixin, which clears that cache when the text version changes.
 
-## 构建 / 运行
+## Build from source
 
 ```powershell
-.\gradlew.bat build        # 产物：build/libs/resourcemanager-1.0.0.jar
-.\gradlew.bat runClient    # 开发环境直接启动客户端（把资源包放进 run/resourcepacks）
+.\gradlew.bat build        # -> build/libs/resourcemanager-1.0.0.jar
+.\gradlew.bat runClient    # dev client; put test packs into run/resourcepacks
 ```
 
-依赖：Java 21、Minecraft 1.21.4、Fabric Loader ≥ 0.16.14、Fabric API。
+## Automated verification
 
-## 自动验证（可选）
-
-`src/client/java/com/abelian/client/verify/VerifyHarness.java` 是一个自检驱动：它会用快捷键打开 GUI、
-注入按键与鼠标点击，断言布局不重叠 / 不越界、禁用后确实回退到下一个包、重新启用后恢复、滑条点击确实
-写入配置、分类过滤后树里只剩 `textures/` 路径、lang 文件被识别为文本资源且改动即时生效（改完还能还原）、
-材质缩略图确实渲染出尺寸、禁用栏能全屏展开并用 ESC 返回，并把截图写到 `run/screenshots/`、报告写到
-`run/verify-report.txt`，运行结束时把配置还原成本次运行前的状态（disabled / sounds / texts 三张表都会还原）。
-它在 `fabric.mod.json` 里已注册，但**只有设置环境变量时才启动**，平时游玩完全不生效。
+`src/client/java/com/abelian/client/verify/VerifyHarness.java` is a self-checking driver. It opens the
+GUI through the key binding, injects key presses and mouse clicks, and asserts: no overlapping or
+out-of-bounds widgets in both a compact and a wide window, a disabled file really falls back to the
+next pack, re-enabling restores the original provider, a slider click is stored in the config, the
+category filter leaves only `textures/` paths, a `lang` file is recognised as text and an edit takes
+effect immediately (and reverting brings the pack text back), the texture thumbnail really renders at
+its size, the disabled column expands to the whole window, and `ESC` returns from it. Screenshots go
+to `run/screenshots/`, the report to `run/verify-report.txt`, and the config is restored to its
+pre-run state (disabled, sounds and texts).
 
 ```powershell
-$env:RESOURCEMANAGER_VERIFY = "1"; .\gradlew.bat runClient     # 跑完会自动退出客户端
+$env:RESOURCEMANAGER_VERIFY = "1"; .\gradlew.bat runClient     # exits the client when done
 ```
 
-最近一次运行：21 项断言全部 PASS，11 张截图，用时约 1 分钟。报告里会逐行列出 `PASS` / `FAIL` / `SKIP`，例如：
+Last run: 21 assertions, all `PASS`, 11 screenshots, about a minute. Sample report lines:
 
 ```
 PASS: a disabled file is no longer served by that pack (file/Squareful ….zip -> vanilla)
@@ -167,9 +247,9 @@ PASS: the texture category only keeps textures (minecraft:textures/block/acacia_
 PASS: the inspector renders a thumbnail of the selected texture (16x16)
 ```
 
-> 这个 harness 会随 jar 一起发布，但入口第一件事就是检查环境变量，没设置时立刻返回，所以正常游玩时它只是多
-> 一个不会被执行的类。要在自己的客户端里复现验证，直接 `$env:RESOURCEMANAGER_VERIFY = "1"` 再启动即可。
+> The harness ships inside the jar, but its entry point checks the environment variable first and
+> returns immediately without it, so it is simply an unused class during normal play.
 
 ## License
 
-CC0-1.0
+MIT — see [LICENSE](LICENSE).
