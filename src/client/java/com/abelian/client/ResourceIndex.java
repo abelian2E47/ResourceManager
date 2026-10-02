@@ -169,7 +169,7 @@ public final class ResourceIndex {
         com.abelian.ResourceManager.LOGGER.info(
                 "Indexed {} packs, {} resources ({}+{} roots) and {} sound events from the live resource manager",
                 packNodes.size(), providers.size(), roots.size(), catalogue.rootFiles().size(), soundEventCount);
-        return new Snapshot(infos, packNodes, providers, fileCount, soundEventCount);
+        return new Snapshot(infos, packNodes, packSources, providers, fileCount, soundEventCount);
     }
 
     private static boolean hasResource(PackResources pack, ResourceLocation location) {
@@ -331,22 +331,29 @@ public final class ResourceIndex {
             for (Map.Entry<String, Leaf> entry : leaves.entrySet()) {
                 add(entry.getKey().split("/"), 0, entry.getValue());
             }
-            buildInto(parent, packId, namespace, providers, events);
+            buildInto(parent, packId, namespace, providers, events, "");
         }
 
+        /**
+         * @param prefix full path of the enclosing directory, so a node keeps both its own name (row label)
+         *               and the complete path (needed to tell a {@code lang} file from a texture)
+         */
         void buildInto(ResourceNode parent, String packId, String namespace,
-                Map<ResourceLocation, List<ResourceNode>> providers, Map<String, List<ResourceNode.SoundEvent>> events) {
+                Map<ResourceLocation, List<ResourceNode>> providers,
+                Map<String, List<ResourceNode.SoundEvent>> events, String prefix) {
             for (Map.Entry<String, DirBuilder> entry : directories.entrySet()) {
-                ResourceNode directory = ResourceNode.directory(packId, namespace, entry.getKey());
-                entry.getValue().buildInto(directory, packId, namespace, providers, events);
+                String directoryPath = prefix.isEmpty() ? entry.getKey() : prefix + "/" + entry.getKey();
+                ResourceNode directory = ResourceNode.directory(packId, namespace, entry.getKey(), directoryPath);
+                entry.getValue().buildInto(directory, packId, namespace, providers, events, directoryPath);
                 parent.addChild(directory);
             }
             for (Map.Entry<String, Leaf> entry : files.entrySet()) {
-                String path = entry.getKey();
+                String path = prefix.isEmpty() ? entry.getKey() : prefix + "/" + entry.getKey();
                 if (!path.equals(path.trim())) {
                     continue;
                 }
-                ResourceNode file = ResourceNode.file(packId, namespace, path, entry.getValue().location());
+                ResourceNode file = ResourceNode.file(packId, namespace, entry.getKey(), path,
+                        entry.getValue().location());
                 List<ResourceNode.SoundEvent> soundEvents = events.get(path);
                 if (soundEvents != null) {
                     for (ResourceNode.SoundEvent event : soundEvents) {
@@ -367,14 +374,16 @@ public final class ResourceIndex {
     public static final class Snapshot {
         private final List<PackInfo> packs;
         private final Map<String, ResourceNode> packNodes;
+        private final Map<String, PackResources> sources;
         private final Map<ResourceLocation, List<ResourceNode>> providers;
         private final int fileCount;
         private final int soundEventCount;
 
-        Snapshot(List<PackInfo> packs, Map<String, ResourceNode> packNodes,
+        Snapshot(List<PackInfo> packs, Map<String, ResourceNode> packNodes, Map<String, PackResources> sources,
                 Map<ResourceLocation, List<ResourceNode>> providers, int fileCount, int soundEventCount) {
             this.packs = List.copyOf(packs);
             this.packNodes = Map.copyOf(packNodes);
+            this.sources = Map.copyOf(sources);
             this.providers = Map.copyOf(providers);
             this.fileCount = fileCount;
             this.soundEventCount = soundEventCount;
@@ -398,6 +407,11 @@ public final class ResourceIndex {
 
         public ResourceNode packNode(String packId) {
             return packNodes.get(packId);
+        }
+
+        /** The pack that owns a file, used to read its raw contents for the preview and the lang editor. */
+        public PackResources packResources(String packId) {
+            return sources.get(packId);
         }
 
         /** All nodes holding the same resource, lowest priority first. */

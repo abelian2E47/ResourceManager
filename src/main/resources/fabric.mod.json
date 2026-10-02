@@ -5,12 +5,8 @@
 	"name": "ResourceManager",
 	"description": "Browse enabled resource packs as a tree and disable individual textures, models or sounds so an earlier pack can override them; also tunes the volume and pitch of sounds.json events. Open with F8.",
 	"authors": [
-		"Me!"
+		"Ay2E47"
 	],
-	"contact": {
-		"homepage": "https://fabricmc.net/",
-		"sources": "https://github.com/FabricMC/fabric-example-mod"
-	},
 	"license": "CC0-1.0",
 	"icon": "assets/resourcemanager/icon.png",
 	"environment": "*",

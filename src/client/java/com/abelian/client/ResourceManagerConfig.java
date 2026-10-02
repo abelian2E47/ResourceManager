@@ -27,7 +27,10 @@ public final class ResourceManagerConfig {
 
     private final Set<String> disabled = ConcurrentHashMap.newKeySet();
     private final Map<String, SoundTuning> sounds = new ConcurrentHashMap<>();
+    private final Map<String, String> texts = new ConcurrentHashMap<>();
     private volatile int version;
+    /** Bumped whenever a language string changes so cached translations can be rebuilt. */
+    private volatile int textVersion;
 
     private ResourceManagerConfig() {
     }
@@ -77,6 +80,14 @@ public final class ResourceManagerConfig {
                         config.sounds.put(entry.getKey(), new SoundTuning(
                                 number(tuning, "volume", 1.0F),
                                 number(tuning, "pitch", 1.0F)));
+                    }
+                }
+            }
+            JsonObject textObject = root.getAsJsonObject("texts");
+            if (textObject != null) {
+                for (Map.Entry<String, JsonElement> entry : textObject.entrySet()) {
+                    if (entry.getValue().isJsonPrimitive()) {
+                        config.texts.put(entry.getKey(), entry.getValue().getAsString());
                     }
                 }
             }
@@ -180,6 +191,44 @@ public final class ResourceManagerConfig {
         return Map.copyOf(sounds);
     }
 
+    // ------------------------------------------------------------------ language text
+
+    /** The override for a translation key, or {@code null} when the pack text is used as is. */
+    public String text(String key) {
+        return key == null ? null : texts.get(key);
+    }
+
+    /** Replaces the value shown for a translation key; {@code null} or empty restores the pack text. */
+    public void setText(String key, String value) {
+        if (key == null) {
+            return;
+        }
+        if (value == null || value.isEmpty()) {
+            if (texts.remove(key) != null) {
+                textVersion++;
+                version++;
+            }
+            return;
+        }
+        if (!value.equals(texts.put(key, value))) {
+            textVersion++;
+            version++;
+        }
+    }
+
+    public Map<String, String> texts() {
+        return Map.copyOf(texts);
+    }
+
+    public int textCount() {
+        return texts.size();
+    }
+
+    /** Changes whenever a text override is added, changed or removed. */
+    public int textVersion() {
+        return textVersion;
+    }
+
     public int tunedSoundCount() {
         return sounds.size();
     }
@@ -208,6 +257,10 @@ public final class ResourceManagerConfig {
                 soundObject.add(entry.getKey(), tuning);
             });
             root.add("sounds", soundObject);
+            JsonObject textObject = new JsonObject();
+            texts.entrySet().stream().sorted(Map.Entry.comparingByKey())
+                    .forEach(entry -> textObject.addProperty(entry.getKey(), entry.getValue()));
+            root.add("texts", textObject);
             Files.writeString(file, GSON.toJson(root));
         } catch (IOException ignored) {
             // Configuration is best effort; runtime behaviour stays usable.

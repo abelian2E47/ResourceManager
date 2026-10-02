@@ -53,12 +53,12 @@ public final class ResourceNode {
         return new ResourceNode(Kind.NAMESPACE, namespace, packId, namespace, null, null);
     }
 
-    public static ResourceNode directory(String packId, String namespace, String path) {
-        return new ResourceNode(Kind.DIRECTORY, path, packId, namespace, path, null);
+    public static ResourceNode directory(String packId, String namespace, String name, String path) {
+        return new ResourceNode(Kind.DIRECTORY, name, packId, namespace, path, null);
     }
 
-    public static ResourceNode file(String packId, String namespace, String path, ResourceLocation location) {
-        ResourceNode node = new ResourceNode(Kind.FILE, path, packId, namespace, path, location);
+    public static ResourceNode file(String packId, String namespace, String name, String path, ResourceLocation location) {
+        ResourceNode node = new ResourceNode(Kind.FILE, name, packId, namespace, path, location);
         node.fileCount = 1;
         return node;
     }

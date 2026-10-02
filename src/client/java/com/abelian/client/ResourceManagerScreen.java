@@ -2,16 +2,20 @@ package com.abelian.client;
 
 import com.abelian.client.ui.DisabledList;
 import com.abelian.client.ui.DragTarget;
+import com.abelian.client.ui.PreviewTexture;
 import com.abelian.client.ui.ScrollList;
+import com.abelian.client.ui.TextKeyList;
 import com.abelian.client.ui.TreeView;
 import com.abelian.client.ui.Ui;
 import com.abelian.client.ui.UiButton;
 import com.abelian.client.ui.UiSlider;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 import net.minecraft.Util;
@@ -21,10 +25,13 @@ import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.Renderable;
 import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.client.resources.sounds.SimpleSoundInstance;
+import net.minecraft.client.resources.sounds.SoundInstance;
+import net.minecraft.client.sounds.SoundManager;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.sounds.SoundEvent;
+import net.minecraft.server.packs.PackResources;
+import net.minecraft.server.packs.PackType;
+import net.minecraft.server.packs.resources.IoSupplier;
 import net.minecraft.util.FormattedCharSequence;
 import org.lwjgl.glfw.GLFW;
 
@@ -34,8 +41,13 @@ import org.lwjgl.glfw.GLFW;
  * <p>Layout: a toolbar on top, a status bar at the bottom and three sibling panels in between —
  * filters/disabled-list, the pack tree and the inspector. Every widget is positioned from the rects
  * computed by {@link #layout()}, so panels and controls can never drift apart or overlap the text.
+ *
+ * <p>The disabled list has two sizes: the sidebar list and, through its expand button, a full window
+ * view where entries can be filtered and restored. Selecting a {@code lang} file turns the inspector
+ * into a text editor for that file's translation keys.
  */
-public final class ResourceManagerScreen extends Screen implements TreeView.Host, DisabledList.Host {
+public final class ResourceManagerScreen extends Screen implements TreeView.Host, DisabledList.Host,
+        TextKeyList.Host {
     private static final int PAD = 8;
     private static final int TOOLBAR_HEIGHT = 20;
     private static final int STATUS_HEIGHT = 12;
@@ -47,6 +59,8 @@ public final class ResourceManagerScreen extends Screen implements TreeView.Host
     private static final float TUNING_MIN = 0.0F;
     private static final float TUNING_MAX = 4.0F;
     private static final long BULK_CONFIRM_MILLIS = 4000L;
+    /** How long a fresh status message keeps its slot in the status bar. */
+    private static final long STATUS_HOLD_MILLIS = 4000L;
 
     private final Screen parent;
     private final ResourceManagerConfig config = ResourceManagerConfig.instance();
@@ -58,8 +72,13 @@ public final class ResourceManagerScreen extends Screen implements TreeView.Host
     private Ui.Rect inspector = new Ui.Rect(0, 0, 0, 0);
     private Ui.Rect filterHeader = new Ui.Rect(0, 0, 0, 0);
     private Ui.Rect disabledHeader = new Ui.Rect(0, 0, 0, 0);
+    private Ui.Rect disabledPanel = new Ui.Rect(0, 0, 0, 0);
+    private Ui.Rect disabledPanelHeader = new Ui.Rect(0, 0, 0, 0);
+    private Ui.Rect disabledPanelBody = new Ui.Rect(0, 0, 0, 0);
+    private Ui.Rect previewBox;
     private Ui.Rect inspectorInfo = new Ui.Rect(0, 0, 0, 0);
     private boolean sidebarOpen;
+    private boolean disabledFullscreen;
 
     private EditBox search;
     private UiButton reloadButton;
@@ -71,17 +90,27 @@ public final class ResourceManagerScreen extends Screen implements TreeView.Host
     private UiButton providerButton;
     private UiButton playButton;
     private UiButton resetButton;
+    private UiButton expandDisabledButton;
+    private UiButton collapseDisabledButton;
     private UiSlider volumeSlider;
     private UiSlider pitchSlider;
     private TreeView treeView;
     private DisabledList disabledList;
+    private EditBox textFilter;
+    private EditBox textValue;
+    private TextKeyList textKeyList;
+    private UiButton textApplyButton;
+    private UiButton textRevertButton;
     private final List<UiButton> filterButtons = new ArrayList<>();
+    private final PreviewTexture preview = new PreviewTexture();
 
     private ResourceIndex.Snapshot snapshot;
     private ResourceTree tree;
     private boolean scanning;
     private int scanGeneration;
     private String statusMessage = "";
+    private String lastStatusMessage = "";
+    private long statusMessageTime;
     private String statusDetail = "";
 
     private ResourceNode selected;
@@ -101,6 +130,18 @@ public final class ResourceManagerScreen extends Screen implements TreeView.Host
     private int pendingChanges;
     private final Set<String> expandedKeys = new LinkedHashSet<>();
     private DragTarget dragTarget;
+
+    /** Identity of what the thumbnail currently shows, so the pixels are read only when it changes. */
+    private String previewIdentity = "";
+    /** Keys of the {@code lang} file selected in the inspector, and the filtered subset that is drawn. */
+    private List<String> langKeys = List.of();
+    private List<String> langKeysFiltered = List.of();
+    private String langKey;
+    private String textEditStatus = "";
+    private SoundInstance previewSound;
+    private boolean lastPreviewActive;
+    private String lastPreviewKey = "";
+    private long previewSoundStart;
 
     public ResourceManagerScreen(Screen parent) {
         super(Component.translatable("resourcemanager.ui.title"));
@@ -177,6 +218,26 @@ public final class ResourceManagerScreen extends Screen implements TreeView.Host
         this.treeView = addRenderableWidget(new TreeView(this.font, 0, 0, 100, 100, this));
         this.disabledList = addRenderableWidget(new DisabledList(this.font, 0, 0, 100, 100, this));
 
+        this.expandDisabledButton = addRenderableWidget(new UiButton(this.font, 0, 0, 20, BUTTON,
+                Component.translatable("resourcemanager.ui.disabled.expand"), this::toggleDisabledFullscreen));
+        this.collapseDisabledButton = addRenderableWidget(new UiButton(this.font, 0, 0, 40, BUTTON,
+                Component.translatable("resourcemanager.ui.disabled.back"), this::toggleDisabledFullscreen));
+
+        this.textFilter = addRenderableWidget(new EditBox(this.font, 0, 0, 120, 12,
+                Component.translatable("resourcemanager.ui.text.filter")));
+        this.textFilter.setHint(Component.translatable("resourcemanager.ui.text.filter.hint"));
+        this.textFilter.setMaxLength(120);
+        this.textFilter.setResponder(value -> refreshLangKeys());
+        this.textKeyList = addRenderableWidget(new TextKeyList(this.font, 0, 0, 100, 100, this));
+        this.textValue = addRenderableWidget(new EditBox(this.font, 0, 0, 120, 12,
+                Component.translatable("resourcemanager.ui.text.value")));
+        this.textValue.setHint(Component.translatable("resourcemanager.ui.text.value.hint"));
+        this.textValue.setMaxLength(400);
+        this.textApplyButton = addRenderableWidget(new UiButton(this.font, 0, 0, 40, BUTTON,
+                Component.translatable("resourcemanager.ui.text.apply"), this::applyTextEdit));
+        this.textRevertButton = addRenderableWidget(new UiButton(this.font, 0, 0, 40, BUTTON,
+                Component.translatable("resourcemanager.ui.text.revert"), this::revertTextEdit));
+
         layout();
         if (this.snapshot == null && !this.scanning) {
             startScan();
@@ -222,6 +283,8 @@ public final class ResourceManagerScreen extends Screen implements TreeView.Host
 
     private void applySnapshot(ResourceIndex.Snapshot result) {
         ResourceNode previous = this.selected;
+        LangText.clearCache();
+        this.previewIdentity = "";
         this.snapshot = result;
         this.tree = new ResourceTree(result.packNodesHighestFirst(),
                 node -> this.config.isDisabled(node.packId(), node.resourceId()));
@@ -229,6 +292,7 @@ public final class ResourceManagerScreen extends Screen implements TreeView.Host
         applyExpandedState();
         this.selected = null;
         this.tuningKey = null;
+        onSelectionChanged(null);
         if (previous != null) {
             ResourceNode restored = findNode(previous);
             if (restored != null) {
@@ -323,7 +387,7 @@ public final class ResourceManagerScreen extends Screen implements TreeView.Host
         int available = this.toolbar.w();
         boolean compact = available < 560;
 
-        boolean showSidebar = this.sidebarOpen && available >= SIDEBAR_MIN_WIDTH;
+        boolean showSidebar = !this.disabledFullscreen && this.sidebarOpen && available >= SIDEBAR_MIN_WIDTH;
         int sidebarWidth = showSidebar ? Ui.clamp(available * 19 / 100, 148, 190) : 0;
         int inspectorWidth = Ui.clamp(available * 31 / 100, 168, 300);
         int gaps = (showSidebar ? 1 : 0) + 1;
@@ -338,20 +402,26 @@ public final class ResourceManagerScreen extends Screen implements TreeView.Host
         treeWidth = Math.max(100, treeWidth);
 
         int x = PAD;
-        if (showSidebar) {
-            this.sidebar = new Ui.Rect(x, contentTop, sidebarWidth, contentHeight);
-            x += sidebarWidth + PANEL_GAP;
-        } else {
-            this.sidebar = null;
+        this.sidebar = null;
+        this.treePanel = new Ui.Rect(0, 0, 0, 0);
+        this.inspector = new Ui.Rect(0, 0, 0, 0);
+        if (!this.disabledFullscreen) {
+            if (showSidebar) {
+                this.sidebar = new Ui.Rect(x, contentTop, sidebarWidth, contentHeight);
+                x += sidebarWidth + PANEL_GAP;
+            }
+            this.treePanel = new Ui.Rect(x, contentTop, treeWidth, contentHeight);
+            x += treeWidth + PANEL_GAP;
+            this.inspector = new Ui.Rect(x, contentTop, inspectorWidth, contentHeight);
         }
-        this.treePanel = new Ui.Rect(x, contentTop, treeWidth, contentHeight);
-        x += treeWidth + PANEL_GAP;
-        this.inspector = new Ui.Rect(x, contentTop, inspectorWidth, contentHeight);
+        // The expanded disabled list takes the whole content area instead of the three panels.
+        this.disabledPanel = new Ui.Rect(PAD, contentTop, available, contentHeight);
 
         layoutToolbar(compact);
         layoutSidebar();
         layoutTree();
         layoutInspector();
+        layoutDisabledView();
     }
 
     private void layoutToolbar(boolean compact) {
@@ -362,7 +432,7 @@ public final class ResourceManagerScreen extends Screen implements TreeView.Host
         this.sidebarButton.setToggled(this.sidebarOpen);
         this.categoryButton.setMessage(Component.translatable("resourcemanager.ui.filter.cycle",
                 Component.translatable(this.category.translationKey())));
-        this.categoryButton.visible = this.sidebar == null;
+        this.categoryButton.visible = this.sidebar == null && !this.disabledFullscreen;
 
         // Right-to-left strip: every button is wide enough for its label, the search box gets what is left
         // (and the buttons give up space first when the window is narrow, so no label is cut off).
@@ -409,6 +479,7 @@ public final class ResourceManagerScreen extends Screen implements TreeView.Host
             }
             this.clearButton.visible = false;
             this.disabledList.visible = false;
+            this.expandDisabledButton.visible = false;
             return;
         }
         int innerX = this.sidebar.x() + 1;
@@ -428,10 +499,14 @@ public final class ResourceManagerScreen extends Screen implements TreeView.Host
         this.disabledHeader = showDisabledList ? this.disabledHeader : null;
         this.clearButton.visible = showDisabledList;
         this.disabledList.visible = showDisabledList;
+        this.expandDisabledButton.visible = showDisabledList;
         if (showDisabledList) {
             Ui.place(this.clearButton, innerX + 4, footerTop, innerWidth - 8, BUTTON);
             Ui.place(this.disabledList, innerX + 3, this.disabledHeader.bottom() + 1, innerWidth - 6,
                     Math.max(12, footerTop - 4 - (this.disabledHeader.bottom() + 1)));
+            int expandWidth = Ui.clamp(this.font.width(this.expandDisabledButton.getMessage()) + 8, 18, 46);
+            Ui.place(this.expandDisabledButton, this.disabledHeader.right() - expandWidth - 1,
+                    this.disabledHeader.y() + 1, expandWidth, HEADER_HEIGHT - 2);
         }
     }
 
@@ -442,8 +517,33 @@ public final class ResourceManagerScreen extends Screen implements TreeView.Host
 
     private void layoutTree() {
         Ui.Rect body = treeBody();
+        this.treeView.visible = body.w() > 0;
         Ui.place(this.treeView, body.x() + 1, body.y() + 1, Math.max(20, body.w() - 2), Math.max(12, body.h() - 2));
-        this.treeView.visible = true;
+    }
+
+    /** Places the expanded disabled list and its header buttons. */
+    private void layoutDisabledView() {
+        this.collapseDisabledButton.visible = this.disabledFullscreen;
+        if (!this.disabledFullscreen) {
+            return;
+        }
+        int headerHeight = BUTTON + 4;
+        this.disabledPanelHeader = new Ui.Rect(this.disabledPanel.x() + 1, this.disabledPanel.y() + 1,
+                this.disabledPanel.w() - 2, headerHeight);
+        int bodyTop = this.disabledPanelHeader.bottom() + 1;
+        this.disabledPanelBody = new Ui.Rect(this.disabledPanel.x() + 1, bodyTop, this.disabledPanel.w() - 2,
+                Math.max(12, this.disabledPanel.bottom() - 1 - bodyTop));
+        int buttonY = this.disabledPanelHeader.y() + 2;
+        int backWidth = Ui.clamp(this.font.width(this.collapseDisabledButton.getMessage()) + 10, 40, 90);
+        int clearWidth = Ui.clamp(this.font.width(this.clearButton.getMessage()) + 10, 40, 130);
+        Ui.place(this.collapseDisabledButton, this.disabledPanelHeader.right() - 3 - backWidth, buttonY, backWidth,
+                BUTTON);
+        Ui.place(this.clearButton, this.disabledPanelHeader.right() - 7 - backWidth - clearWidth, buttonY, clearWidth,
+                BUTTON);
+        this.clearButton.visible = true;
+        Ui.place(this.disabledList, this.disabledPanelBody.x() + 1, this.disabledPanelBody.y() + 1,
+                this.disabledPanelBody.w() - 2, Math.max(12, this.disabledPanelBody.h() - 2));
+        this.disabledList.visible = true;
     }
 
     private Ui.Rect treeHeader() {
@@ -451,35 +551,61 @@ public final class ResourceManagerScreen extends Screen implements TreeView.Host
     }
 
     private Ui.Rect treeBody() {
+        if (this.treePanel.w() <= 0 || this.treePanel.h() <= 0) {
+            return new Ui.Rect(0, 0, 0, 0);
+        }
         Ui.Rect header = treeHeader();
         return new Ui.Rect(header.x(), header.bottom(), header.w(),
                 Math.max(12, this.treePanel.bottom() - 1 - header.bottom()));
     }
 
     private void layoutInspector() {
+        if (this.inspector.w() <= 0) {
+            this.hideInspectorWidgets();
+            return;
+        }
         int innerX = this.inspector.x() + 1;
         int innerWidth = this.inspector.w() - 2;
         int infoTop = this.inspector.y() + 1 + HEADER_HEIGHT + 4;
+        boolean textMode = this.selected != null && LangText.isLangFile(this.selected.path());
         boolean hasSound = this.selected != null && this.selected.isSoundEvent();
+        this.toggleButton.visible = canToggle(this.selected) && !textMode;
+        this.providerButton.visible = this.selected != null && this.selected.isFile() && this.snapshot != null
+                && this.snapshot.providersOf(this.selected.location()).size() > 1 && !textMode;
+        layoutTextEditor(innerX, innerWidth, infoTop, textMode);
+
+        if (textMode) {
+            this.volumeSlider.visible = false;
+            this.pitchSlider.visible = false;
+            this.playButton.visible = false;
+            this.resetButton.visible = false;
+            return;
+        }
+
         int soundHeight = hasSound ? HEADER_HEIGHT + SLIDER_HEIGHT * 2 + 6 + BUTTON : 0;
         int soundTop = hasSound ? this.inspector.bottom() - 4 - soundHeight : this.inspector.bottom() - 4;
-
-        this.toggleButton.visible = canToggle(this.selected);
-        this.providerButton.visible = this.selected != null && this.selected.isFile() && this.snapshot != null
-                && this.snapshot.providersOf(this.selected.location()).size() > 1;
 
         int buttonCount = (this.toggleButton.visible ? 1 : 0) + (this.providerButton.visible ? 1 : 0);
         int actionHeight = buttonCount > 0 ? BUTTON : 0;
         int actionTop = soundTop - 6 - actionHeight;
-        int columnWidth = (innerWidth - 8 - (buttonCount == 2 ? 4 : 0)) / Math.max(1, buttonCount);
-        if (this.toggleButton.visible) {
-            Ui.place(this.toggleButton, innerX + 4, actionTop, columnWidth, BUTTON);
-        }
-        if (this.providerButton.visible) {
-            int secondX = this.toggleButton.visible ? innerX + 4 + columnWidth + 4 : innerX + 4;
-            Ui.place(this.providerButton, secondX, actionTop, columnWidth, BUTTON);
-        }
         this.toggleButton.setMessage(toggleLabel());
+        if (buttonCount > 0) {
+            int budget = innerWidth - 8;
+            int first;
+            if (buttonCount == 1) {
+                first = budget;
+            } else {
+                int wanted = this.font.width(toggleLabel()) + 10;
+                int wantedSecond = this.font.width(this.providerButton.getMessage()) + 10;
+                int gap = 4;
+                first = Math.max(40, Math.min(wanted, budget - gap - Math.min(wantedSecond, budget / 2)));
+            }
+            Ui.place(this.toggleButton, innerX + 4, actionTop, first, BUTTON);
+            if (this.providerButton.visible) {
+                Ui.place(this.providerButton, innerX + 4 + first + 4, actionTop,
+                        Math.max(40, innerWidth - 8 - first - 4), BUTTON);
+            }
+        }
 
         this.inspectorInfo = new Ui.Rect(innerX + 4, infoTop, innerWidth - 8,
                 Math.max(10, actionTop - 4 - infoTop));
@@ -489,14 +615,72 @@ public final class ResourceManagerScreen extends Screen implements TreeView.Host
         this.playButton.visible = hasSound;
         this.resetButton.visible = hasSound;
         if (hasSound) {
+            int width = (innerWidth - 8 - 4) / 2;
             Ui.place(this.volumeSlider, innerX + 4, soundTop + HEADER_HEIGHT, innerWidth - 8, SLIDER_HEIGHT);
             Ui.place(this.pitchSlider, innerX + 4, soundTop + HEADER_HEIGHT + SLIDER_HEIGHT + 3, innerWidth - 8,
                     SLIDER_HEIGHT);
-            int width = (innerWidth - 8 - 4) / 2;
             Ui.place(this.resetButton, innerX + 4, soundTop + HEADER_HEIGHT + (SLIDER_HEIGHT + 3) * 2, width, BUTTON);
             Ui.place(this.playButton, innerX + 8 + width, soundTop + HEADER_HEIGHT + (SLIDER_HEIGHT + 3) * 2, width,
                     BUTTON);
         }
+
+        // Thumbnail of the inspected texture, above the information lines.
+        boolean image = this.selected != null && this.selected.isFile() && isImageFile(this.selected.path());
+        int previewHeight = image ? Ui.clamp(Math.min(innerWidth - 8, 104), 24, 104) : 0;
+        this.previewBox = image
+                ? new Ui.Rect(this.inspectorInfo.x() + (this.inspectorInfo.w() - previewHeight) / 2,
+                        this.inspectorInfo.y(), previewHeight, previewHeight)
+                : null;
+        if (this.previewBox != null) {
+            this.inspectorInfo = new Ui.Rect(this.inspectorInfo.x(), this.previewBox.bottom() + 4,
+                    this.inspectorInfo.w(), Math.max(10, this.inspectorInfo.bottom() - this.previewBox.bottom() - 4));
+        }
+    }
+
+    private void hideInspectorWidgets() {
+        this.toggleButton.visible = false;
+        this.providerButton.visible = false;
+        this.volumeSlider.visible = false;
+        this.pitchSlider.visible = false;
+        this.playButton.visible = false;
+        this.resetButton.visible = false;
+        this.textFilter.visible = false;
+        this.textKeyList.visible = false;
+        this.textValue.visible = false;
+        this.textApplyButton.visible = false;
+        this.textRevertButton.visible = false;
+        this.inspectorInfo = new Ui.Rect(0, 0, 0, 0);
+        this.previewBox = null;
+    }
+
+    /** The translation key editor fills the inspector from top to bottom. */
+    private void layoutTextEditor(int innerX, int innerWidth, int infoTop, boolean textMode) {
+        this.textFilter.visible = textMode;
+        this.textKeyList.visible = textMode;
+        this.textValue.visible = textMode;
+        this.textApplyButton.visible = textMode;
+        this.textRevertButton.visible = textMode;
+        if (!textMode) {
+            return;
+        }
+        this.previewBox = null;
+        int x = innerX + 4;
+        int width = Math.max(40, innerWidth - 8);
+        int bottom = this.inspector.bottom() - 4;
+        // The information block always shows name + pack + keys + key + file value + game value + status,
+        // so it gets whatever is left after the filter, the key list, the value box and the two buttons.
+        int reserved = 12 + 24 + 12 + BUTTON + 12;
+        int infoHeight = Ui.clamp(Math.min(80, bottom - infoTop - reserved), 32, 80);
+        this.inspectorInfo = new Ui.Rect(x, infoTop, width, infoHeight);
+        Ui.place(this.textFilter, x, this.inspectorInfo.bottom() + 3, width, 12);
+        int buttonsTop = bottom - BUTTON;
+        int valueTop = buttonsTop - 3 - 12;
+        int listTop = this.inspectorInfo.bottom() + 3 + 12 + 3;
+        Ui.place(this.textKeyList, x, listTop, width, Math.max(12, valueTop - 3 - listTop));
+        Ui.place(this.textValue, x, valueTop, width, 12);
+        int half = (width - 4) / 2;
+        Ui.place(this.textApplyButton, x, buttonsTop, half, BUTTON);
+        Ui.place(this.textRevertButton, x + half + 4, buttonsTop, width - half - 4, BUTTON);
     }
 
     // ------------------------------------------------------------------ rendering
@@ -506,14 +690,19 @@ public final class ResourceManagerScreen extends Screen implements TreeView.Host
         syncConfig();
         layout();
         saveTuningIfIdle();
+        checkPreviewSound();
 
         renderBackground(graphics, mouseX, mouseY, delta);
         renderToolbar(graphics);
-        if (this.sidebar != null) {
-            renderSidebar(graphics);
+        if (this.disabledFullscreen) {
+            renderDisabledView(graphics);
+        } else {
+            if (this.sidebar != null) {
+                renderSidebar(graphics);
+            }
+            renderTreePanel(graphics);
+            renderInspector(graphics);
         }
-        renderTreePanel(graphics);
-        renderInspector(graphics);
         renderStatusBar(graphics);
 
         // Screen.render() would call renderBackground() a second time and paint over everything drawn
@@ -539,13 +728,41 @@ public final class ResourceManagerScreen extends Screen implements TreeView.Host
         Ui.header(graphics, this.font, this.filterHeader, Component.translatable("resourcemanager.ui.panel.filters"),
                 Ui.MUTED);
         if (this.disabledHeader != null) {
-            Ui.header(graphics, this.font, this.disabledHeader,
-                    Component.translatable("resourcemanager.ui.panel.disabled", this.config.disabledCount()),
+            // The title is trimmed so that it never runs under the expand button of the panel.
+            boolean expand = this.expandDisabledButton.visible;
+            int reserved = expand ? this.expandDisabledButton.getWidth() + 8 : 4;
+            String title = Ui.trim(this.font,
+                    Component.translatable("resourcemanager.ui.panel.disabled", this.config.disabledCount())
+                            .getString(),
+                    this.disabledHeader.w() - reserved);
+            Ui.header(graphics, this.font, this.disabledHeader, Component.literal(title),
                     this.config.disabledCount() > 0 ? Ui.WARN : Ui.MUTED);
             if (this.config.disabledCount() == 0) {
                 graphics.drawString(this.font, Component.translatable("resourcemanager.ui.empty.disabled"),
                         this.disabledList.getX() + 3, this.disabledList.getY() + 2, Ui.OFF, false);
             }
+        }
+    }
+
+    /** Full window view of the disabled entries. */
+    private void renderDisabledView(GuiGraphics graphics) {
+        Ui.panel(graphics, this.disabledPanel, Ui.PANEL, Ui.BORDER);
+        boolean expand = this.expandDisabledButton.visible;
+        int reserved = (expand ? this.expandDisabledButton.getWidth() : 0)
+                + this.collapseDisabledButton.getWidth() + this.clearButton.getWidth() + 24;
+        String title = Ui.trim(this.font,
+                Component.translatable("resourcemanager.ui.panel.disabled", this.config.disabledCount()).getString(),
+                this.disabledPanelHeader.w() - reserved);
+        Ui.header(graphics, this.font, this.disabledPanelHeader, Component.literal(title),
+                this.config.disabledCount() > 0 ? Ui.WARN : Ui.MUTED);
+        graphics.fill(this.disabledPanelBody.x(), this.disabledPanelBody.y(), this.disabledPanelBody.right(),
+                this.disabledPanelBody.bottom(), Ui.BODY);
+        if (this.disabledKeys.isEmpty()) {
+            String message = this.config.disabledCount() == 0
+                    ? Component.translatable("resourcemanager.ui.empty.disabled").getString()
+                    : Component.translatable("resourcemanager.ui.empty.disabledFiltered").getString();
+            graphics.drawString(this.font, message, this.disabledPanelBody.x() + 6, this.disabledPanelBody.y() + 5,
+                    Ui.MUTED, false);
         }
     }
 
@@ -571,9 +788,12 @@ public final class ResourceManagerScreen extends Screen implements TreeView.Host
 
     private void renderInspector(GuiGraphics graphics) {
         Ui.panel(graphics, this.inspector, Ui.PANEL, Ui.BORDER);
+        boolean textMode = this.selected != null && LangText.isLangFile(this.selected.path());
         Ui.header(graphics, this.font,
                 new Ui.Rect(this.inspector.x() + 1, this.inspector.y() + 1, this.inspector.w() - 2, HEADER_HEIGHT),
-                Component.translatable("resourcemanager.ui.panel.inspector"), Ui.TEXT);
+                Component.translatable(textMode ? "resourcemanager.ui.panel.inspector.text"
+                        : "resourcemanager.ui.panel.inspector"),
+                Ui.TEXT);
 
         int x = this.inspectorInfo.x();
         int width = this.inspectorInfo.w();
@@ -583,6 +803,10 @@ public final class ResourceManagerScreen extends Screen implements TreeView.Host
         if (this.selected == null) {
             drawWrapped(graphics, Component.translatable("resourcemanager.ui.selectHint"), x, y, width, Ui.MUTED, 4,
                     limit);
+            return;
+        }
+        if (textMode) {
+            renderTextInfo(graphics, x, y, width, limit);
             return;
         }
         ResourceNode node = this.selected;
@@ -613,8 +837,50 @@ public final class ResourceManagerScreen extends Screen implements TreeView.Host
             y = drawInfoLine(graphics, x, y, width, limit, Component.translatable("resourcemanager.ui.info.providers"),
                     value, Ui.MUTED);
         }
-        drawInfoLine(graphics, x, y, width, limit, Component.translatable("resourcemanager.ui.info.state"),
+        y = drawInfoLine(graphics, x, y, width, limit, Component.translatable("resourcemanager.ui.info.state"),
                 stateText(node), stateColor(node));
+        if (this.previewBox != null) {
+            ensurePreview(node);
+            this.preview.render(graphics, this.previewBox);
+            if (this.preview.hasImage()) {
+                String size = this.preview.sourceWidth() + "x" + this.preview.sourceHeight();
+                graphics.drawString(this.font, size, this.previewBox.right() - this.font.width(size),
+                        this.previewBox.bottom() + 2, Ui.OFF, false);
+            }
+        }
+    }
+
+    /** Inspector body for a {@code lang} file: what the file declares and what the game shows now. */
+    private void renderTextInfo(GuiGraphics graphics, int x, int y, int width, int limit) {
+        ResourceNode node = this.selected;
+        String language = LangText.languageOf(node.path());
+        y = drawWrapped(graphics, Component.literal(node.name() + "  (" + language + ")"), x, y, width, Ui.TEXT, 1,
+                limit) + 2;
+        y = drawInfoLine(graphics, x, y, width, limit, Component.translatable("resourcemanager.ui.info.pack"),
+                node.packId(), Ui.MUTED);
+        y = drawInfoLine(graphics, x, y, width, limit, Component.translatable("resourcemanager.ui.info.keys"),
+                Component.translatable("resourcemanager.ui.info.keysValue", this.langKeys.size(),
+                        this.config.textCount()).getString(), Ui.MUTED);
+        y = drawInfoLine(graphics, x, y, width, limit, Component.translatable("resourcemanager.ui.info.selectedKey"),
+                this.langKey == null ? "-" : this.langKey, Ui.ACCENT);
+        Map<String, String> values = currentLangValues();
+        String fileValue = this.langKey == null ? null : values.get(this.langKey);
+        String effective = this.langKey == null ? null : LangText.effective(this.langKey);
+        if (this.langKey != null) {
+            y = drawInfoLine(graphics, x, y, width, limit, Component.translatable("resourcemanager.ui.info.fileValue"),
+                    valueOrDash(fileValue), Ui.MUTED);
+            y = drawInfoLine(graphics, x, y, width, limit,
+                    Component.translatable("resourcemanager.ui.info.effectiveValue"), valueOrDash(effective),
+                    Ui.OK);
+        }
+        // The status is the one line that may be dropped, but never one that may overlap the lines above.
+        if (!this.textEditStatus.isEmpty() && y + 9 <= limit) {
+            graphics.drawString(this.font, Ui.trim(this.font, this.textEditStatus, width), x, y, Ui.ACCENT, false);
+        }
+    }
+
+    private static String valueOrDash(String value) {
+        return value == null || value.isEmpty() ? "-" : value;
     }
 
     private String stateText(ResourceNode node) {
@@ -670,6 +936,7 @@ public final class ResourceManagerScreen extends Screen implements TreeView.Host
     }
 
     private void renderStatusBar(GuiGraphics graphics) {
+        refreshStatusTime();
         graphics.fill(this.statusBar.x(), this.statusBar.y(), this.statusBar.right(), this.statusBar.bottom(),
                 Ui.PANEL);
         String left = this.scanning ? this.statusMessage
@@ -681,18 +948,38 @@ public final class ResourceManagerScreen extends Screen implements TreeView.Host
             left = left + "  \u00b7  " + Component.translatable("resourcemanager.ui.status.disabledCount",
                     this.config.disabledCount()).getString();
         }
+        if (this.config.textCount() > 0) {
+            left = left + "  \u00b7  " + Component.translatable("resourcemanager.ui.status.textCount",
+                    this.config.textCount()).getString();
+        }
         graphics.drawString(this.font, Ui.trim(this.font, left, this.statusBar.w() / 2), this.statusBar.x(),
                 this.statusBar.y() + 2, Ui.MUTED, false);
 
-        String right = this.pendingChanges > 0
-                ? Component.translatable("resourcemanager.ui.status.pending", this.pendingChanges).getString()
-                : Component.translatable("resourcemanager.ui.hints").getString();
-        int color = this.pendingChanges > 0 ? Ui.WARN : Ui.OFF;
+        // A fresh message (preview result, restored entry, applied text) wins over the generic hints for a while.
+        boolean fresh = !this.statusMessage.isEmpty() && Util.getMillis() - this.statusMessageTime < STATUS_HOLD_MILLIS;
+        String right;
+        if (fresh) {
+            right = this.statusMessage;
+        } else if (this.pendingChanges > 0) {
+            right = Component.translatable("resourcemanager.ui.status.pending", this.pendingChanges).getString();
+        } else {
+            right = Component.translatable(this.disabledFullscreen ? "resourcemanager.ui.hints.disabled"
+                    : "resourcemanager.ui.hints").getString();
+        }
+        int color = fresh ? Ui.ACCENT : this.pendingChanges > 0 ? Ui.WARN : Ui.OFF;
         // The hint is the first thing to drop when the window is too narrow for both halves.
         int leftWidth = this.font.width(Ui.trim(this.font, left, this.statusBar.w() / 2));
-        if (this.pendingChanges > 0 || leftWidth + 8 + this.font.width(right) <= this.statusBar.w()) {
+        if (fresh || this.pendingChanges > 0 || leftWidth + 8 + this.font.width(right) <= this.statusBar.w()) {
             graphics.drawString(this.font, right, this.statusBar.right() - this.font.width(right),
                     this.statusBar.y() + 2, color, false);
+        }
+    }
+
+    /** Remembers when the status message last changed, so a fresh message can outrank the standing hints. */
+    private void refreshStatusTime() {
+        if (!this.statusMessage.equals(this.lastStatusMessage)) {
+            this.lastStatusMessage = this.statusMessage;
+            this.statusMessageTime = Util.getMillis();
         }
     }
 
@@ -753,6 +1040,7 @@ public final class ResourceManagerScreen extends Screen implements TreeView.Host
             this.tree.setFilter(this.query, this.category);
             this.treeView.clampScroll();
         }
+        refreshDisabledKeys();
     }
 
     private void setCategory(ResourceCategory value) {
@@ -769,7 +1057,7 @@ public final class ResourceManagerScreen extends Screen implements TreeView.Host
             return;
         }
         this.lastConfigVersion = version;
-        this.disabledKeys = List.copyOf(new TreeSet<>(this.config.disabledKeys()));
+        refreshDisabledKeys();
         Set<String> keys = new LinkedHashSet<>();
         this.config.sounds().keySet().forEach(key -> {
             keys.add(key);
@@ -821,14 +1109,28 @@ public final class ResourceManagerScreen extends Screen implements TreeView.Host
 
     private void playSelectedSound() {
         if (this.tuningKey == null) {
+            this.statusMessage = Component.translatable("resourcemanager.ui.preview.noSelection").getString();
             return;
         }
         ResourceLocation id = ResourceLocation.tryParse(this.tuningKey);
         if (id == null) {
             return;
         }
-        SoundEvent event = SoundEvent.createVariableRangeEvent(id);
-        Minecraft.getInstance().getSoundManager().play(SimpleSoundInstance.forUI(event, 1.0F, 1.0F));
+        SoundManager manager = Minecraft.getInstance().getSoundManager();
+        SoundPreview.Availability availability = SoundPreview.availability(manager, id);
+        if (!availability.isPlayable()) {
+            // The engine drops unresolvable events without a word, so say why nothing was heard.
+            this.lastPreviewActive = false;
+            this.lastPreviewKey = this.tuningKey;
+            this.statusMessage = Component.translatable(availability.translationKey(), this.tuningKey).getString();
+            return;
+        }
+        SoundInstance instance = SoundPreview.create(id);
+        manager.play(instance);
+        this.previewSound = instance;
+        this.previewSoundStart = Util.getMillis();
+        this.lastPreviewKey = this.tuningKey;
+        this.statusMessage = Component.translatable("resourcemanager.ui.preview.starting", this.tuningKey).getString();
     }
 
     /** Second click confirms bulk operations so a stray click cannot disable thousands of files. */
@@ -957,7 +1259,7 @@ public final class ResourceManagerScreen extends Screen implements TreeView.Host
         if (handled && button == 0) {
             DragTarget target = null;
             for (DragTarget candidate : Arrays.asList(this.volumeSlider, this.pitchSlider, this.treeView,
-                    this.disabledList)) {
+                    this.disabledList, this.textKeyList)) {
                 if (candidate.isDragging()) {
                     target = candidate;
                     break;
@@ -994,6 +1296,10 @@ public final class ResourceManagerScreen extends Screen implements TreeView.Host
 
     @Override
     public boolean charTyped(char character, int modifiers) {
+        // The search box only grabs typing when no other text field is active.
+        if (isEditingText()) {
+            return super.charTyped(character, modifiers);
+        }
         if (this.search != null && !this.search.isFocused() && character >= ' '
                 && Character.isLetterOrDigit(character)) {
             this.search.setFocused(true);
@@ -1004,11 +1310,41 @@ public final class ResourceManagerScreen extends Screen implements TreeView.Host
         return super.charTyped(character, modifiers);
     }
 
+    private boolean isEditingText() {
+        return this.textValue != null && (this.textValue.isFocused() || this.textFilter.isFocused());
+    }
+
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
         if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
+            if (this.disabledFullscreen) {
+                toggleDisabledFullscreen();
+                return true;
+            }
             onClose();
             return true;
+        }
+        if (this.textValue != null && this.textValue.isFocused()) {
+            if (keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER) {
+                applyTextEdit();
+                return true;
+            }
+            return super.keyPressed(keyCode, scanCode, modifiers);
+        }
+        if (this.textFilter != null && this.textFilter.isFocused()) {
+            switch (keyCode) {
+                case GLFW.GLFW_KEY_ENTER, GLFW.GLFW_KEY_KP_ENTER, GLFW.GLFW_KEY_DOWN -> {
+                    focusTextList(false);
+                    return true;
+                }
+                case GLFW.GLFW_KEY_UP -> {
+                    focusTextList(true);
+                    return true;
+                }
+                default -> {
+                    return super.keyPressed(keyCode, scanCode, modifiers);
+                }
+            }
         }
         if (this.search != null && this.search.isFocused()) {
             switch (keyCode) {
@@ -1022,6 +1358,25 @@ public final class ResourceManagerScreen extends Screen implements TreeView.Host
                 }
                 case GLFW.GLFW_KEY_UP -> {
                     focusTree(true);
+                    return true;
+                }
+                default -> {
+                    return super.keyPressed(keyCode, scanCode, modifiers);
+                }
+            }
+        }
+        if (this.disabledFullscreen) {
+            switch (keyCode) {
+                case GLFW.GLFW_KEY_DOWN -> {
+                    this.disabledList.moveSelection(1);
+                    return true;
+                }
+                case GLFW.GLFW_KEY_UP -> {
+                    this.disabledList.moveSelection(-1);
+                    return true;
+                }
+                case GLFW.GLFW_KEY_ENTER, GLFW.GLFW_KEY_KP_ENTER -> {
+                    this.disabledList.restoreSelected();
                     return true;
                 }
                 default -> {
@@ -1154,6 +1509,7 @@ public final class ResourceManagerScreen extends Screen implements TreeView.Host
             this.tree.reveal(node);
             this.treeView.reveal(node);
         }
+        onSelectionChanged(node);
     }
 
     @Override
@@ -1276,5 +1632,270 @@ public final class ResourceManagerScreen extends Screen implements TreeView.Host
             }
         }
         this.statusMessage = "Not loaded: " + key;
+    }
+
+    @Override
+    public void restoreDisabledKey(String key) {
+        int separator = key.indexOf('|');
+        if (separator < 0) {
+            return;
+        }
+        this.config.setDisabled(key.substring(0, separator), key.substring(separator + 1), false);
+        this.config.save();
+        this.pendingChanges++;
+        this.statusMessage = Component.translatable("resourcemanager.ui.status.restored", key.replace('|', ' '))
+                .getString();
+    }
+
+    @Override
+    public boolean disabledExpanded() {
+        return this.disabledFullscreen;
+    }
+
+    /** Swaps between the sidebar list and the full window view of the disabled entries. */
+    private void toggleDisabledFullscreen() {
+        this.disabledFullscreen = !this.disabledFullscreen;
+        this.disabledList.select(-1);
+        refreshDisabledKeys();
+        layout();
+    }
+
+    /**
+     * The list of disabled keys, restricted to the search query while the expanded view is open so that
+     * the toolbar search box filters the entries the same way it filters the tree.
+     */
+    private void refreshDisabledKeys() {
+        TreeSet<String> keys = new TreeSet<>(this.config.disabledKeys());
+        if (this.disabledFullscreen) {
+            String needle = this.query == null ? "" : this.query.trim().toLowerCase(Locale.ROOT);
+            if (!needle.isEmpty()) {
+                keys.removeIf(key -> !key.toLowerCase(Locale.ROOT).replace('|', ' ').contains(needle));
+            }
+        }
+        this.disabledKeys = List.copyOf(keys);
+        // init() restores the search value before the list exists, so this must stay null safe.
+        if (this.disabledList != null) {
+            this.disabledList.clampScroll();
+        }
+    }
+
+    // ------------------------------------------------------------------ TextKeyList.Host
+
+    @Override
+    public List<String> textKeys() {
+        return this.langKeysFiltered;
+    }
+
+    @Override
+    public String selectedTextKey() {
+        return this.langKey;
+    }
+
+    @Override
+    public void selectTextKey(String key) {
+        this.langKey = key;
+        this.textEditStatus = "";
+        String override = this.config.text(key);
+        this.textValue.setValue(override == null ? "" : override);
+    }
+
+    @Override
+    public boolean textOverridden(String key) {
+        return this.config.text(key) != null;
+    }
+
+    /** Refreshes the key list whenever the selection or the filter changes. */
+    private void refreshLangKeys() {
+        String filter = this.textFilter == null ? "" : this.textFilter.getValue().trim().toLowerCase(Locale.ROOT);
+        if (filter.isEmpty() || this.langKeys.isEmpty()) {
+            this.langKeysFiltered = this.langKeys;
+        } else {
+            Map<String, String> values = currentLangValues();
+            List<String> filtered = new ArrayList<>();
+            for (String key : this.langKeys) {
+                String value = values.get(key);
+                if (key.toLowerCase(Locale.ROOT).contains(filter)
+                        || (value != null && value.toLowerCase(Locale.ROOT).contains(filter))) {
+                    filtered.add(key);
+                }
+            }
+            this.langKeysFiltered = List.copyOf(filtered);
+        }
+        this.textKeyList.resetScroll();
+    }
+
+    /** Values declared by the selected {@code lang} file, parsed once and cached. */
+    private Map<String, String> currentLangValues() {
+        ResourceNode node = this.selected;
+        if (node == null || this.snapshot == null || !LangText.isLangFile(node.path())) {
+            return Map.of();
+        }
+        return LangText.values(node.packId(), node.location(),
+                resource(this.snapshot.packResources(node.packId()), node.location()));
+    }
+
+    private void applyTextEdit() {
+        if (this.langKey == null) {
+            this.textEditStatus = Component.translatable("resourcemanager.ui.text.noKey").getString();
+            return;
+        }
+        if (this.textValue.isFocused()) {
+            this.textValue.setFocused(false);
+            setFocused(null);
+        }
+        this.config.setText(this.langKey, this.textValue.getValue());
+        this.config.save();
+        this.pendingChanges++;
+        this.textEditStatus = Component.translatable("resourcemanager.ui.text.applied", this.langKey).getString();
+    }
+
+    private void revertTextEdit() {
+        if (this.langKey == null) {
+            this.textEditStatus = Component.translatable("resourcemanager.ui.text.noKey").getString();
+            return;
+        }
+        this.config.setText(this.langKey, null);
+        this.config.save();
+        this.pendingChanges++;
+        this.textValue.setValue("");
+        this.textEditStatus = Component.translatable("resourcemanager.ui.text.reverted", this.langKey).getString();
+    }
+
+    /** Leaves the key filter and hands keyboard navigation to the key list. */
+    private void focusTextList(boolean fromBottom) {
+        if (this.textFilter != null) {
+            this.textFilter.setFocused(false);
+        }
+        setFocused(null);
+        if (this.langKeysFiltered.isEmpty()) {
+            return;
+        }
+        selectTextKey(this.langKeysFiltered.get(fromBottom ? this.langKeysFiltered.size() - 1 : 0));
+        this.textKeyList.scrollToRow(fromBottom ? this.langKeysFiltered.size() - 1 : 0);
+    }
+
+    // ------------------------------------------------------------------ preview
+
+    /** Reads the pixels of the inspected file once per selection. */
+    private void ensurePreview(ResourceNode node) {
+        String identity = node.packId() + "|" + node.location();
+        if (identity.equals(this.previewIdentity)) {
+            return;
+        }
+        this.previewIdentity = identity;
+        if (this.snapshot == null || !isImageFile(node.path())) {
+            this.preview.clear();
+            return;
+        }
+        this.preview.show(resource(this.snapshot.packResources(node.packId()), node.location()));
+    }
+
+    private static boolean isImageFile(String path) {
+        if (path == null) {
+            return false;
+        }
+        String lower = path.toLowerCase(Locale.ROOT);
+        return lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".jpeg");
+    }
+
+    private static IoSupplier<InputStream> resource(PackResources pack, ResourceLocation location) {
+        if (pack == null || location == null) {
+            return null;
+        }
+        try {
+            return pack.getResource(PackType.CLIENT_RESOURCES, location);
+        } catch (Exception error) {
+            return null;
+        }
+    }
+
+    /** Loads the translation keys of the selected {@code lang} file. */
+    private void onSelectionChanged(ResourceNode node) {
+        this.previewIdentity = "";
+        this.langKey = null;
+        this.textEditStatus = "";
+        boolean langFile = node != null && this.snapshot != null && LangText.isLangFile(node.path());
+        if (!langFile) {
+            this.langKeys = List.of();
+            this.langKeysFiltered = List.of();
+            if (this.textFilter != null) {
+                this.textFilter.setValue("");
+            }
+            if (this.textValue != null) {
+                this.textValue.setValue("");
+            }
+            return;
+        }
+        this.langKeys = LangText.keys(node.packId(), node.location(),
+                resource(this.snapshot.packResources(node.packId()), node.location()));
+        if (this.textFilter != null && !this.textFilter.getValue().isEmpty()) {
+            this.textFilter.setValue("");
+        } else {
+            refreshLangKeys();
+        }
+        if (this.textValue != null) {
+            this.textValue.setValue("");
+        }
+        this.statusMessage = Component.translatable("resourcemanager.ui.status.langFile", this.langKeys.size())
+                .getString();
+    }
+
+    // ------------------------------------------------------------------ sound preview
+
+    /** Tells the user whether the preview really started playing instead of failing silently. */
+    private void checkPreviewSound() {
+        if (this.previewSound == null || Util.getMillis() - this.previewSoundStart < 120L) {
+            return;
+        }
+        SoundManager manager = Minecraft.getInstance().getSoundManager();
+        this.lastPreviewActive = manager.isActive(this.previewSound);
+        this.lastPreviewKey = this.previewSound.getLocation().toString();
+        this.previewSound = null;
+        this.statusMessage = Component.translatable(this.lastPreviewActive
+                ? "resourcemanager.ui.preview.playing"
+                : "resourcemanager.ui.preview.silent", this.lastPreviewKey).getString();
+    }
+
+    /** True when the last preview was still being played one tick after it started. */
+    public boolean previewActive() {
+        return this.lastPreviewActive;
+    }
+
+    public String previewKey() {
+        return this.lastPreviewKey;
+    }
+
+    public boolean disabledFullscreenActive() {
+        return this.disabledFullscreen;
+    }
+
+    public String statusMessage() {
+        return this.statusMessage;
+    }
+
+    /** True when the thumbnail of the inspected texture has pixels. */
+    public boolean previewReady() {
+        return this.preview.hasImage();
+    }
+
+    public String previewSize() {
+        return this.preview.sourceWidth() + "x" + this.preview.sourceHeight();
+    }
+
+    /** Translation keys of the selected {@code lang} file; empty when the inspector is not in text mode. */
+    public List<String> translationKeys() {
+        return this.langKeys;
+    }
+
+    public String selectedTranslationKey() {
+        return this.langKey;
+    }
+
+    public String soundTuningKey() {
+        return this.tuningKey;
+    }
+
+    public boolean textEditorVisible() {
+        return this.textFilter != null && this.textFilter.visible && this.textApplyButton.visible;
     }
 }

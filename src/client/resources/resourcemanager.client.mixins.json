@@ -3,8 +3,10 @@
 	"package": "com.abelian.client.mixin",
 	"compatibilityLevel": "JAVA_21",
     "client": [
+        "ClientLanguageMixin",
         "FallbackResourceManagerMixin",
-        "SoundInstanceMixin"
+        "SoundInstanceMixin",
+        "TranslatableContentsMixin"
     ],
 	"injectors": {
 		"defaultRequire": 1
