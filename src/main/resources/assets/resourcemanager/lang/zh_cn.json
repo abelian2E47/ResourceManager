@@ -1,0 +1,78 @@
+{
+  "key.categories.resourcemanager": "资源管理器",
+  "key.resourcemanager.open": "打开资源管理器",
+
+  "resourcemanager.ui.title": "资源管理器",
+  "resourcemanager.ui.search": "搜索资源",
+  "resourcemanager.ui.search.hint": "搜索资源包、目录或文件名...",
+  "resourcemanager.ui.reload": "重载资源包",
+  "resourcemanager.ui.close": "关闭",
+  "resourcemanager.ui.sidebar.show": "侧边栏",
+  "resourcemanager.ui.filter.cycle": "筛选：%s",
+  "resourcemanager.ui.clearAll": "全部清除",
+
+  "resourcemanager.ui.panel.filters": "筛选",
+  "resourcemanager.ui.panel.disabled": "已禁用 (%s)",
+  "resourcemanager.ui.panel.tree": "资源树",
+  "resourcemanager.ui.panel.inspector": "检查器",
+
+  "resourcemanager.ui.filter.all": "全部",
+  "resourcemanager.ui.filter.textures": "贴图",
+  "resourcemanager.ui.filter.sounds": "音效",
+  "resourcemanager.ui.filter.ui": "界面",
+  "resourcemanager.ui.filter.models": "模型",
+  "resourcemanager.ui.filter.text": "文本",
+  "resourcemanager.ui.filter.other": "其它",
+
+  "resourcemanager.ui.action.disable": "禁用该资源",
+  "resourcemanager.ui.action.enable": "启用该资源",
+  "resourcemanager.ui.action.disableAll": "批量禁用 (%s)",
+  "resourcemanager.ui.action.enableAll": "批量启用 (%s)",
+  "resourcemanager.ui.action.confirm": "再次点击确认 (%s)",
+  "resourcemanager.ui.action.provider": "切换来源",
+  "resourcemanager.ui.action.play": "试听",
+  "resourcemanager.ui.action.reset": "重置",
+
+  "resourcemanager.ui.sound.volume": "音量",
+  "resourcemanager.ui.sound.pitch": "音高",
+
+  "resourcemanager.ui.status.scanning": "正在扫描已启用的资源包...",
+  "resourcemanager.ui.status.reloading": "正在重载资源包...",
+  "resourcemanager.ui.status.loaded": "%s 个文件 · %s 个资源包 · %s 个音效事件",
+  "resourcemanager.ui.status.disabledCount": "已禁用 %s",
+  "resourcemanager.ui.status.pending": "%s 项改动未应用 — 点击“重载资源包”生效",
+  "resourcemanager.ui.hints": "回车切换禁用 · 方向键浏览 · 双击展开",
+
+  "resourcemanager.ui.tree.count": "%s / %s",
+  "resourcemanager.ui.scanning": "正在扫描资源包...",
+  "resourcemanager.ui.empty.tree": "没有匹配的资源",
+  "resourcemanager.ui.empty.disabled": "暂无禁用项",
+  "resourcemanager.ui.selectHint": "在左侧树中选择资源包、目录、文件或音效事件。被禁用的文件会退回到加载顺序更靠后的资源包。",
+
+  "resourcemanager.ui.info.pack": "资源包",
+  "resourcemanager.ui.info.type": "类型",
+  "resourcemanager.ui.info.priority": "优先级",
+  "resourcemanager.ui.info.files": "文件数",
+  "resourcemanager.ui.info.providers": "提供者",
+  "resourcemanager.ui.info.state": "状态",
+
+  "resourcemanager.ui.type.pack": "资源包",
+  "resourcemanager.ui.type.namespace": "命名空间",
+  "resourcemanager.ui.type.folder": "目录",
+  "resourcemanager.ui.type.file": "文件",
+  "resourcemanager.ui.type.sound": "音效事件",
+
+  "resourcemanager.ui.state.disabled": "已禁用（可由更靠后的资源包提供）",
+  "resourcemanager.ui.state.active": "生效中（当前由此包提供）",
+  "resourcemanager.ui.state.shadowed": "被 %s 覆盖",
+  "resourcemanager.ui.state.missing": "已无提供者",
+  "resourcemanager.ui.state.default": "默认 1.00 / 1.00",
+  "resourcemanager.ui.state.tuned": "已调整 %s / %s",
+  "resourcemanager.ui.state.disabledCount": "%s / %s 已禁用",
+
+  "resourcemanager.ui.badge.off": "禁用",
+  "resourcemanager.ui.badge.active": "生效",
+  "resourcemanager.ui.badge.shadowed": "被覆盖",
+  "resourcemanager.ui.badge.missing": "缺失",
+  "resourcemanager.ui.badge.tuned": "已调整"
+}

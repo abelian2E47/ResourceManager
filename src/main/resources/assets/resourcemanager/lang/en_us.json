@@ -1,0 +1,78 @@
+{
+  "key.categories.resourcemanager": "Resource Manager",
+  "key.resourcemanager.open": "Open Resource Manager",
+
+  "resourcemanager.ui.title": "Resource Manager",
+  "resourcemanager.ui.search": "Search resources",
+  "resourcemanager.ui.search.hint": "Search pack, folder or file...",
+  "resourcemanager.ui.reload": "Reload packs",
+  "resourcemanager.ui.close": "Close",
+  "resourcemanager.ui.sidebar.show": "Sidebar",
+  "resourcemanager.ui.filter.cycle": "Filter: %s",
+  "resourcemanager.ui.clearAll": "Clear all",
+
+  "resourcemanager.ui.panel.filters": "FILTERS",
+  "resourcemanager.ui.panel.disabled": "DISABLED (%s)",
+  "resourcemanager.ui.panel.tree": "RESOURCE TREE",
+  "resourcemanager.ui.panel.inspector": "INSPECTOR",
+
+  "resourcemanager.ui.filter.all": "All",
+  "resourcemanager.ui.filter.textures": "Textures",
+  "resourcemanager.ui.filter.sounds": "Sounds",
+  "resourcemanager.ui.filter.ui": "UI",
+  "resourcemanager.ui.filter.models": "Models",
+  "resourcemanager.ui.filter.text": "Text",
+  "resourcemanager.ui.filter.other": "Other",
+
+  "resourcemanager.ui.action.disable": "Disable resource",
+  "resourcemanager.ui.action.enable": "Enable resource",
+  "resourcemanager.ui.action.disableAll": "Disable all (%s)",
+  "resourcemanager.ui.action.enableAll": "Enable all (%s)",
+  "resourcemanager.ui.action.confirm": "Click again to confirm (%s)",
+  "resourcemanager.ui.action.provider": "Next provider",
+  "resourcemanager.ui.action.play": "Play",
+  "resourcemanager.ui.action.reset": "Reset",
+
+  "resourcemanager.ui.sound.volume": "Volume",
+  "resourcemanager.ui.sound.pitch": "Pitch",
+
+  "resourcemanager.ui.status.scanning": "Scanning enabled resource packs...",
+  "resourcemanager.ui.status.reloading": "Reloading resource packs...",
+  "resourcemanager.ui.status.loaded": "%s files · %s packs · %s sound events",
+  "resourcemanager.ui.status.disabledCount": "%s disabled",
+  "resourcemanager.ui.status.pending": "%s unsaved changes — click \"Reload packs\" to apply",
+  "resourcemanager.ui.hints": "Enter toggle · arrows navigate · double-click expands",
+
+  "resourcemanager.ui.tree.count": "%s / %s",
+  "resourcemanager.ui.scanning": "Scanning resource packs...",
+  "resourcemanager.ui.empty.tree": "No matching resource",
+  "resourcemanager.ui.empty.disabled": "Nothing disabled",
+  "resourcemanager.ui.selectHint": "Select a pack, folder, file or sound event in the tree. Disabled files fall back to the packs below them in the loading order.",
+
+  "resourcemanager.ui.info.pack": "Pack",
+  "resourcemanager.ui.info.type": "Type",
+  "resourcemanager.ui.info.priority": "Priority",
+  "resourcemanager.ui.info.files": "Files",
+  "resourcemanager.ui.info.providers": "Providers",
+  "resourcemanager.ui.info.state": "State",
+
+  "resourcemanager.ui.type.pack": "pack",
+  "resourcemanager.ui.type.namespace": "namespace",
+  "resourcemanager.ui.type.folder": "folder",
+  "resourcemanager.ui.type.file": "file",
+  "resourcemanager.ui.type.sound": "sound event",
+
+  "resourcemanager.ui.state.disabled": "Disabled (lower packs can provide it)",
+  "resourcemanager.ui.state.active": "Active (this pack wins)",
+  "resourcemanager.ui.state.shadowed": "Shadowed by %s",
+  "resourcemanager.ui.state.missing": "No provider left",
+  "resourcemanager.ui.state.default": "Default 1.00 / 1.00",
+  "resourcemanager.ui.state.tuned": "Tuned %s / %s",
+  "resourcemanager.ui.state.disabledCount": "%s of %s disabled",
+
+  "resourcemanager.ui.badge.off": "off",
+  "resourcemanager.ui.badge.active": "active",
+  "resourcemanager.ui.badge.shadowed": "shadowed",
+  "resourcemanager.ui.badge.missing": "missing",
+  "resourcemanager.ui.badge.tuned": "tuned"
+}
