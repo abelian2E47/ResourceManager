@@ -3,7 +3,7 @@
 	"id": "resourcemanager",
 	"version": "${version}",
 	"name": "ResourceManager",
-	"description": "Browse enabled resource packs as a tree and disable individual textures, models or sounds so an earlier pack can override them; also tunes the volume and pitch of sounds.json events. Open with F8.",
+	"description": "Browse enabled resource packs as a tree and disable individual textures, models or sounds so an earlier pack can override them; also tunes the volume and pitch of sounds.json events and edits lang keys so item names and other text change in game. Built for Minecraft 1.21.8. Open with F8.",
 	"authors": [
 		"Ay2E47"
 	],
@@ -28,7 +28,7 @@
 	],
 	"depends": {
 		"fabricloader": ">=0.16.14",
-		"minecraft": "~1.21.4",
+		"minecraft": ">=1.21.8 <1.21.9",
 		"java": ">=21",
 		"fabric-api": "*"
 	}

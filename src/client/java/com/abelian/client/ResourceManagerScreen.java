@@ -719,7 +719,7 @@ public final class ResourceManagerScreen extends Screen implements TreeView.Host
         saveTuningIfIdle();
         checkPreviewSound();
 
-        renderBackground(graphics, mouseX, mouseY, delta);
+        // 1.21.6+ blurs the background once per frame before this call, so drawing it again throws.
         renderToolbar(graphics);
         if (this.disabledFullscreen) {
             renderDisabledView(graphics);
@@ -1039,7 +1039,7 @@ public final class ResourceManagerScreen extends Screen implements TreeView.Host
         if (index >= 0 && isMouseOver(this.treeView, mouseX, mouseY)) {
             ResourceTree.Row row = this.treeView.rowAt(index);
             if (row != null) {
-                graphics.renderTooltip(this.font, Component.literal(row.node().displayPath()), mouseX, mouseY);
+                graphics.setTooltipForNextFrame(this.font, Component.literal(row.node().displayPath()), mouseX, mouseY);
             }
             return;
         }
@@ -1047,7 +1047,7 @@ public final class ResourceManagerScreen extends Screen implements TreeView.Host
         if (disabledIndex >= 0 && isMouseOver(this.disabledList, mouseX, mouseY)) {
             String key = this.disabledList.tooltipAt(disabledIndex);
             if (key != null) {
-                graphics.renderTooltip(this.font, Component.literal(key), mouseX, mouseY);
+                graphics.setTooltipForNextFrame(this.font, Component.literal(key), mouseX, mouseY);
             }
         }
     }

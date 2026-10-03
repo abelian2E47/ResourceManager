@@ -1224,7 +1224,7 @@ public final class VerifyHarness implements ClientModInitializer {
     }
 
     private void screenshot(Minecraft client, String name) {
-        Screenshot.grab(client.gameDirectory, name, client.getMainRenderTarget(), message -> {
+        Screenshot.grab(client.gameDirectory, name, client.getMainRenderTarget(), 1, message -> {
         });
     }
 

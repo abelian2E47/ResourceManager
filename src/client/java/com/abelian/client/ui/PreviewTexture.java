@@ -5,7 +5,7 @@ import java.io.InputStream;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.renderer.RenderType;
+import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.resources.IoSupplier;
@@ -39,7 +39,7 @@ public final class PreviewTexture {
         }
         try {
             if (this.texture == null) {
-                this.texture = new DynamicTexture(image);
+                this.texture = new DynamicTexture(() -> "resourcemanager preview", image);
                 this.texture.setFilter(false, false);
                 Minecraft.getInstance().getTextureManager().register(ID, this.texture);
             } else {
@@ -106,7 +106,7 @@ public final class PreviewTexture {
         }
         int x = box.x() + (box.w() - drawWidth) / 2;
         int y = box.y() + (box.h() - drawHeight) / 2;
-        graphics.blit(RenderType::guiTextured, ID, x, y, 0.0F, 0.0F, drawWidth, drawHeight,
+        graphics.blit(RenderPipelines.GUI_TEXTURED, ID, x, y, 0.0F, 0.0F, drawWidth, drawHeight,
                 this.sourceWidth, this.sourceHeight);
     }
 
