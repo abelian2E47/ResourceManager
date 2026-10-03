@@ -49,6 +49,27 @@ like your own — the change stays on your machine.
 | ![Texture preview](docs/screenshot-texture-preview.png) | |
 | Previewing a texture that a pack overrides | |
 
+## Supported versions and branches
+
+Every supported Minecraft version lives on its own branch; `main` follows the newest one. Only the
+branch name differs — the GUI, the config format and the behaviour are the same.
+
+| Branch | Minecraft | Fabric API used | Automated verification |
+| --- | --- | --- | --- |
+| `1.21.4` (also `main`) | 1.21.4 | 0.119.4+1.21.4 | 43 assertions, all PASS, 15 screenshots |
+| `1.21.1` | 1.21.1 | 0.116.8+1.21.1 | 32 PASS, 4 SKIP |
+| `1.21.8` | 1.21.8 | 0.136.1+1.21.8 | 32 PASS, 4 SKIP |
+| `1.21.11` | 1.21.11 | 0.141.3+1.21.11 | 32 PASS, 4 SKIP |
+
+Build the branch you need with `./gradlew build`; the jar lands in `build/libs`. To keep several
+versions side by side: `git worktree add "..\resourcemanager-1.21.8" 1.21.8`.
+
+The `SKIP`s on the non-1.21.4 branches are the checks that need an external resource pack: the packs
+used as fixtures were built for 1.21.4, and 1.21.1 / 1.21.8 mark them incompatible while 1.21.11
+rejects them outright (`min_format` / `max_format` metadata). Everything else still runs — both mixins
+report `applied = true`, the GUI opens from the key bind, search, disabling, tuning, previews, text
+editing and the item-name override are all exercised on every branch.
+
 ## Requirements
 
 | | |
