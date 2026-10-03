@@ -2,7 +2,7 @@ package com.abelian.client;
 
 import java.util.ArrayList;
 import java.util.List;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 /** One entry of the resource tree: a pack, a namespace, a folder, a file or a sound event. */
 public final class ResourceNode {
@@ -20,7 +20,7 @@ public final class ResourceNode {
     private final String packId;
     private final String namespace;
     private final String path;
-    private final ResourceLocation location;
+    private final Identifier location;
     private final List<ResourceNode> children = new ArrayList<>();
     private final List<SoundEvent> soundEvents = new ArrayList<>();
     private final int priority;
@@ -31,11 +31,11 @@ public final class ResourceNode {
     private boolean expanded;
     private boolean matches = true;
 
-    private ResourceNode(Kind kind, String name, String packId, String namespace, String path, ResourceLocation location) {
+    private ResourceNode(Kind kind, String name, String packId, String namespace, String path, Identifier location) {
         this(kind, name, packId, namespace, path, location, 0);
     }
 
-    private ResourceNode(Kind kind, String name, String packId, String namespace, String path, ResourceLocation location, int priority) {
+    private ResourceNode(Kind kind, String name, String packId, String namespace, String path, Identifier location, int priority) {
         this.kind = kind;
         this.name = name;
         this.packId = packId;
@@ -57,13 +57,13 @@ public final class ResourceNode {
         return new ResourceNode(Kind.DIRECTORY, name, packId, namespace, path, null);
     }
 
-    public static ResourceNode file(String packId, String namespace, String name, String path, ResourceLocation location) {
+    public static ResourceNode file(String packId, String namespace, String name, String path, Identifier location) {
         ResourceNode node = new ResourceNode(Kind.FILE, name, packId, namespace, path, location);
         node.fileCount = 1;
         return node;
     }
 
-    public static ResourceNode sound(String packId, String namespace, ResourceLocation soundsJson, String eventId) {
+    public static ResourceNode sound(String packId, String namespace, Identifier soundsJson, String eventId) {
         return new ResourceNode(Kind.SOUND, eventId, packId, namespace, soundsJson.getPath(), soundsJson);
     }
 
@@ -97,7 +97,7 @@ public final class ResourceNode {
         return path;
     }
 
-    public ResourceLocation location() {
+    public Identifier location() {
         return location;
     }
 

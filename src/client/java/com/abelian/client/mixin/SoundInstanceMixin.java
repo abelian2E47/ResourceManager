@@ -34,6 +34,6 @@ public abstract class SoundInstanceMixin {
 
     private ResourceManagerConfig.SoundTuning resourcemanager$tuning() {
         AbstractSoundInstance sound = (AbstractSoundInstance) (Object) this;
-        return ResourceManagerConfig.instance().sound(sound.getLocation().toString());
+        return ResourceManagerConfig.instance().sound(sound.getIdentifier().toString());
     }
 }

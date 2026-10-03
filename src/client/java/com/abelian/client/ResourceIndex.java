@@ -18,7 +18,7 @@ import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 import net.minecraft.client.Minecraft;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.PackResources;
 import net.minecraft.server.packs.PackType;
 import net.minecraft.server.packs.resources.Resource;
@@ -105,7 +105,7 @@ public final class ResourceIndex {
             infos.add(new PackInfo(packId, priority));
         }
 
-        Map<ResourceLocation, List<String>> locations = new LinkedHashMap<>();
+        Map<Identifier, List<String>> locations = new LinkedHashMap<>();
         Catalogue catalogue = readCatalogue(client);
         Set<String> roots = new LinkedHashSet<>(ASSET_ROOTS);
         roots.addAll(catalogue.roots());
@@ -131,45 +131,45 @@ public final class ResourceIndex {
                     }
                 }
             }
-            for (ResourceLocation location : catalogue.rootFiles()) {
+            for (Identifier location : catalogue.rootFiles()) {
                 if (hasResource(pack, location)) {
                     addProvider(locations, location, packId);
                 }
             }
             for (String namespace : namespaces) {
-                ResourceLocation sounds = ResourceLocation.fromNamespaceAndPath(namespace, "sounds.json");
+                Identifier sounds = Identifier.fromNamespaceAndPath(namespace, "sounds.json");
                 if (hasResource(pack, sounds)) {
                     addProvider(locations, sounds, packId);
                 }
             }
         }
 
-        Map<String, List<ResourceLocation>> byPack = new HashMap<>();
+        Map<String, List<Identifier>> byPack = new HashMap<>();
         locations.forEach((location, ids) -> {
             for (String packId : ids) {
                 byPack.computeIfAbsent(packId, key -> new ArrayList<>()).add(location);
             }
         });
 
-        Map<ResourceLocation, List<ResourceNode>> providers = new LinkedHashMap<>();
+        Map<Identifier, List<ResourceNode>> providers = new LinkedHashMap<>();
         int fileCount = 0;
         int soundEventCount = 0;
         for (Map.Entry<String, ResourceNode> entry : packNodes.entrySet()) {
             String packId = entry.getKey();
             ResourceNode packNode = entry.getValue();
             PackResources pack = packSources.get(packId);
-            List<ResourceLocation> packLocations = byPack.get(packId);
+            List<Identifier> packLocations = byPack.get(packId);
             if (pack == null || packLocations == null) {
                 continue;
             }
-            Map<String, List<ResourceLocation>> byNamespace = new TreeMap<>();
-            for (ResourceLocation location : packLocations) {
+            Map<String, List<Identifier>> byNamespace = new TreeMap<>();
+            for (Identifier location : packLocations) {
                 byNamespace.computeIfAbsent(location.getNamespace(), key -> new ArrayList<>()).add(location);
             }
-            for (Map.Entry<String, List<ResourceLocation>> namespaceEntry : byNamespace.entrySet()) {
+            for (Map.Entry<String, List<Identifier>> namespaceEntry : byNamespace.entrySet()) {
                 String namespace = namespaceEntry.getKey();
                 Map<String, Leaf> leaves = new TreeMap<>(PATH_ORDER);
-                for (ResourceLocation location : namespaceEntry.getValue()) {
+                for (Identifier location : namespaceEntry.getValue()) {
                     if (!location.getPath().isEmpty()) {
                         leaves.put(location.getPath(), new Leaf(location));
                     }
@@ -194,7 +194,7 @@ public final class ResourceIndex {
         return snapshot;
     }
 
-    private static boolean hasResource(PackResources pack, ResourceLocation location) {
+    private static boolean hasResource(PackResources pack, Identifier location) {
         try {
             return pack.getResource(PackType.CLIENT_RESOURCES, location) != null;
         } catch (Exception error) {
@@ -203,7 +203,7 @@ public final class ResourceIndex {
     }
 
     /** Records one more pack providing a location, keeping the lowest to highest priority pack order. */
-    private static void addProvider(Map<ResourceLocation, List<String>> locations, ResourceLocation location,
+    private static void addProvider(Map<Identifier, List<String>> locations, Identifier location,
             String packId) {
         List<String> ids = locations.computeIfAbsent(location, key -> new ArrayList<>());
         if (!ids.contains(packId)) {
@@ -263,12 +263,12 @@ public final class ResourceIndex {
     // ------------------------------------------------------------------ catalogue
 
     /** Asset roots and namespace level files found inside {@code resourcepacks/}. */
-    private record Catalogue(Set<String> roots, Set<ResourceLocation> rootFiles) {
+    private record Catalogue(Set<String> roots, Set<Identifier> rootFiles) {
     }
 
     private static Catalogue readCatalogue(Minecraft client) {
         Set<String> roots = new LinkedHashSet<>();
-        Set<ResourceLocation> rootFiles = new LinkedHashSet<>();
+        Set<Identifier> rootFiles = new LinkedHashSet<>();
         Path directory = client.gameDirectory.toPath().resolve("resourcepacks");
         if (!Files.isDirectory(directory)) {
             return new Catalogue(roots, rootFiles);
@@ -291,7 +291,7 @@ public final class ResourceIndex {
         return new Catalogue(roots, rootFiles);
     }
 
-    private static void scanDirectory(Path assets, Set<String> roots, Set<ResourceLocation> rootFiles) {
+    private static void scanDirectory(Path assets, Set<String> roots, Set<Identifier> rootFiles) {
         if (!Files.isDirectory(assets)) {
             return;
         }
@@ -305,7 +305,7 @@ public final class ResourceIndex {
         }
     }
 
-    private static void scanArchive(Path pack, Set<String> roots, Set<ResourceLocation> rootFiles) throws IOException {
+    private static void scanArchive(Path pack, Set<String> roots, Set<Identifier> rootFiles) throws IOException {
         try (ZipFile zip = new ZipFile(pack.toFile())) {
             var entries = zip.entries();
             while (entries.hasMoreElements()) {
@@ -322,7 +322,7 @@ public final class ResourceIndex {
     }
 
     /** Splits {@code <namespace>/<rest>} into an asset root ({@code rest} has a folder) or a namespace file. */
-    private static void record(String relative, Set<String> roots, Set<ResourceLocation> rootFiles) {
+    private static void record(String relative, Set<String> roots, Set<Identifier> rootFiles) {
         int namespaceEnd = relative.indexOf('/');
         if (namespaceEnd <= 0 || namespaceEnd == relative.length() - 1) {
             return;
@@ -334,13 +334,13 @@ public final class ResourceIndex {
             roots.add(rest.substring(0, directoryEnd));
             return;
         }
-        ResourceLocation location = ResourceLocation.tryBuild(namespace, rest);
+        Identifier location = Identifier.tryBuild(namespace, rest);
         if (location != null) {
             rootFiles.add(location);
         }
     }
 
-    private record Leaf(ResourceLocation location) {
+    private record Leaf(Identifier location) {
     }
 
     /** Temporary tree used while a pack is being walked; turns into {@link ResourceNode}s afterwards. */
@@ -357,7 +357,7 @@ public final class ResourceIndex {
         }
 
         void build(Map<String, Leaf> leaves, ResourceNode parent, String packId, String namespace,
-                Map<ResourceLocation, List<ResourceNode>> providers,
+                Map<Identifier, List<ResourceNode>> providers,
                 Map<String, List<ResourceNode.SoundEvent>> events) {
             for (Map.Entry<String, Leaf> entry : leaves.entrySet()) {
                 add(entry.getKey().split("/"), 0, entry.getValue());
@@ -370,7 +370,7 @@ public final class ResourceIndex {
          *               and the complete path (needed to tell a {@code lang} file from a texture)
          */
         void buildInto(ResourceNode parent, String packId, String namespace,
-                Map<ResourceLocation, List<ResourceNode>> providers,
+                Map<Identifier, List<ResourceNode>> providers,
                 Map<String, List<ResourceNode.SoundEvent>> events, String prefix) {
             for (Map.Entry<String, DirBuilder> entry : directories.entrySet()) {
                 String directoryPath = prefix.isEmpty() ? entry.getKey() : prefix + "/" + entry.getKey();
@@ -406,12 +406,12 @@ public final class ResourceIndex {
         private final List<PackInfo> packs;
         private final Map<String, ResourceNode> packNodes;
         private final Map<String, PackResources> sources;
-        private final Map<ResourceLocation, List<ResourceNode>> providers;
+        private final Map<Identifier, List<ResourceNode>> providers;
         private final int fileCount;
         private final int soundEventCount;
 
         Snapshot(List<PackInfo> packs, Map<String, ResourceNode> packNodes, Map<String, PackResources> sources,
-                Map<ResourceLocation, List<ResourceNode>> providers, int fileCount, int soundEventCount) {
+                Map<Identifier, List<ResourceNode>> providers, int fileCount, int soundEventCount) {
             this.packs = List.copyOf(packs);
             this.packNodes = Map.copyOf(packNodes);
             this.sources = Map.copyOf(sources);
@@ -446,7 +446,7 @@ public final class ResourceIndex {
         }
 
         /** All nodes holding the same resource, lowest priority first. */
-        public List<ResourceNode> providersOf(ResourceLocation location) {
+        public List<ResourceNode> providersOf(Identifier location) {
             return providers.getOrDefault(location, List.of());
         }
 

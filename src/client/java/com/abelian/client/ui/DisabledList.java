@@ -1,7 +1,7 @@
 package com.abelian.client.ui;
 
 import java.util.List;
-import net.minecraft.Util;
+import net.minecraft.util.Util;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 

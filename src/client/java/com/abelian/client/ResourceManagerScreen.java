@@ -18,7 +18,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
-import net.minecraft.Util;
+import net.minecraft.util.Util;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.EditBox;
@@ -28,12 +28,15 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.resources.sounds.SoundInstance;
 import net.minecraft.client.sounds.SoundManager;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.PackResources;
 import net.minecraft.server.packs.PackType;
 import net.minecraft.server.packs.resources.IoSupplier;
 import net.minecraft.util.FormattedCharSequence;
 import org.lwjgl.glfw.GLFW;
+import net.minecraft.client.input.CharacterEvent;
+import net.minecraft.client.input.KeyEvent;
+import net.minecraft.client.input.MouseButtonEvent;
 
 /**
  * Resource Manager GUI.
@@ -719,7 +722,7 @@ public final class ResourceManagerScreen extends Screen implements TreeView.Host
         saveTuningIfIdle();
         checkPreviewSound();
 
-        renderBackground(graphics, mouseX, mouseY, delta);
+        // 1.21.6+ blurs the background once per frame before this call, so drawing it again throws.
         renderToolbar(graphics);
         if (this.disabledFullscreen) {
             renderDisabledView(graphics);
@@ -1039,7 +1042,7 @@ public final class ResourceManagerScreen extends Screen implements TreeView.Host
         if (index >= 0 && isMouseOver(this.treeView, mouseX, mouseY)) {
             ResourceTree.Row row = this.treeView.rowAt(index);
             if (row != null) {
-                graphics.renderTooltip(this.font, Component.literal(row.node().displayPath()), mouseX, mouseY);
+                graphics.setTooltipForNextFrame(this.font, Component.literal(row.node().displayPath()), mouseX, mouseY);
             }
             return;
         }
@@ -1047,7 +1050,7 @@ public final class ResourceManagerScreen extends Screen implements TreeView.Host
         if (disabledIndex >= 0 && isMouseOver(this.disabledList, mouseX, mouseY)) {
             String key = this.disabledList.tooltipAt(disabledIndex);
             if (key != null) {
-                graphics.renderTooltip(this.font, Component.literal(key), mouseX, mouseY);
+                graphics.setTooltipForNextFrame(this.font, Component.literal(key), mouseX, mouseY);
             }
         }
     }
@@ -1227,7 +1230,7 @@ public final class ResourceManagerScreen extends Screen implements TreeView.Host
             this.statusMessage = Component.translatable("resourcemanager.ui.preview.noSelection").getString();
             return;
         }
-        ResourceLocation id = ResourceLocation.tryParse(this.tuningKey);
+        Identifier id = Identifier.tryParse(this.tuningKey);
         if (id == null) {
             return;
         }
@@ -1369,9 +1372,9 @@ public final class ResourceManagerScreen extends Screen implements TreeView.Host
     // ------------------------------------------------------------------ input
 
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        boolean handled = super.mouseClicked(mouseX, mouseY, button);
-        if (handled && button == 0) {
+    public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
+        boolean handled = super.mouseClicked(event, doubleClick);
+        if (handled && event.button() == 0) {
             DragTarget target = null;
             for (DragTarget candidate : Arrays.asList(this.volumeSlider, this.pitchSlider, this.treeView,
                     this.disabledList, this.textKeyList)) {
@@ -1386,22 +1389,22 @@ public final class ResourceManagerScreen extends Screen implements TreeView.Host
     }
 
     @Override
-    public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
-        if (this.dragTarget != null && button == 0) {
-            this.dragTarget.dragTo(mouseX, mouseY);
+    public boolean mouseDragged(MouseButtonEvent event, double dragX, double dragY) {
+        if (this.dragTarget != null && event.button() == 0) {
+            this.dragTarget.dragTo(event.x(), event.y());
             return true;
         }
-        return super.mouseDragged(mouseX, mouseY, button, dragX, dragY);
+        return super.mouseDragged(event, dragX, dragY);
     }
 
     @Override
-    public boolean mouseReleased(double mouseX, double mouseY, int button) {
-        if (this.dragTarget != null && button == 0) {
+    public boolean mouseReleased(MouseButtonEvent event) {
+        if (this.dragTarget != null && event.button() == 0) {
             this.dragTarget.endDrag();
             this.dragTarget = null;
             return true;
         }
-        return super.mouseReleased(mouseX, mouseY, button);
+        return super.mouseReleased(event);
     }
 
     @Override
@@ -1410,19 +1413,20 @@ public final class ResourceManagerScreen extends Screen implements TreeView.Host
     }
 
     @Override
-    public boolean charTyped(char character, int modifiers) {
+    public boolean charTyped(CharacterEvent event) {
         // The search box only grabs typing when no other text field is active.
         if (isEditingText()) {
-            return super.charTyped(character, modifiers);
+            return super.charTyped(event);
         }
-        if (this.search != null && !this.search.isFocused() && character >= ' '
-                && Character.isLetterOrDigit(character)) {
+        int codepoint = event.codepoint();
+        if (this.search != null && !this.search.isFocused() && codepoint >= ' '
+                && Character.isLetterOrDigit(codepoint)) {
             this.search.setFocused(true);
-            this.search.insertText(String.valueOf(character));
+            this.search.insertText(String.valueOf((char) codepoint));
             setFocused(this.search);
             return true;
         }
-        return super.charTyped(character, modifiers);
+        return super.charTyped(event);
     }
 
     private boolean isEditingText() {
@@ -1430,7 +1434,8 @@ public final class ResourceManagerScreen extends Screen implements TreeView.Host
     }
 
     @Override
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+    public boolean keyPressed(KeyEvent event) {
+        int keyCode = event.key();
         if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
             if (this.disabledFullscreen) {
                 toggleDisabledFullscreen();
@@ -1444,7 +1449,7 @@ public final class ResourceManagerScreen extends Screen implements TreeView.Host
                 applyTextEdit();
                 return true;
             }
-            return super.keyPressed(keyCode, scanCode, modifiers);
+            return super.keyPressed(event);
         }
         if (this.textFilter != null && this.textFilter.isFocused()) {
             switch (keyCode) {
@@ -1457,7 +1462,7 @@ public final class ResourceManagerScreen extends Screen implements TreeView.Host
                     return true;
                 }
                 default -> {
-                    return super.keyPressed(keyCode, scanCode, modifiers);
+                    return super.keyPressed(event);
                 }
             }
         }
@@ -1476,7 +1481,7 @@ public final class ResourceManagerScreen extends Screen implements TreeView.Host
                     return true;
                 }
                 default -> {
-                    return super.keyPressed(keyCode, scanCode, modifiers);
+                    return super.keyPressed(event);
                 }
             }
         }
@@ -1495,7 +1500,7 @@ public final class ResourceManagerScreen extends Screen implements TreeView.Host
                     return true;
                 }
                 default -> {
-                    return super.keyPressed(keyCode, scanCode, modifiers);
+                    return super.keyPressed(event);
                 }
             }
         }
@@ -1533,7 +1538,7 @@ public final class ResourceManagerScreen extends Screen implements TreeView.Host
                 return true;
             }
             default -> {
-                return super.keyPressed(keyCode, scanCode, modifiers);
+                return super.keyPressed(event);
             }
         }
     }
@@ -1736,7 +1741,7 @@ public final class ResourceManagerScreen extends Screen implements TreeView.Host
         }
         String packId = key.substring(0, separator);
         String location = key.substring(separator + 1);
-        ResourceLocation id = ResourceLocation.tryParse(location);
+        Identifier id = Identifier.tryParse(location);
         if (id == null) {
             return;
         }
@@ -1935,7 +1940,7 @@ public final class ResourceManagerScreen extends Screen implements TreeView.Host
     }
 
     /** The resource the running manager serves for this location, or {@code null} when nobody serves it. */
-    private static IoSupplier<InputStream> liveResource(ResourceLocation location) {
+    private static IoSupplier<InputStream> liveResource(Identifier location) {
         if (location == null) {
             return null;
         }
@@ -1956,7 +1961,7 @@ public final class ResourceManagerScreen extends Screen implements TreeView.Host
         return lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".jpeg");
     }
 
-    private static IoSupplier<InputStream> resource(PackResources pack, ResourceLocation location) {
+    private static IoSupplier<InputStream> resource(PackResources pack, Identifier location) {
         if (pack == null || location == null) {
             return null;
         }
@@ -2007,7 +2012,7 @@ public final class ResourceManagerScreen extends Screen implements TreeView.Host
         }
         SoundManager manager = Minecraft.getInstance().getSoundManager();
         this.lastPreviewActive = manager.isActive(this.previewSound);
-        this.lastPreviewKey = this.previewSound.getLocation().toString();
+        this.lastPreviewKey = this.previewSound.getIdentifier().toString();
         this.previewSound = null;
         this.statusMessage = Component.translatable(this.lastPreviewActive
                 ? "resourcemanager.ui.preview.playing"

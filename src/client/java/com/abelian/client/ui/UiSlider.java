@@ -5,6 +5,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.network.chat.Component;
+import net.minecraft.client.input.MouseButtonEvent;
 
 /**
  * Horizontal value slider with a label on the left and the numeric value on the right. Dragging works
@@ -85,18 +86,18 @@ public class UiSlider extends AbstractWidget implements DragTarget {
     }
 
     @Override
-    public void onClick(double mouseX, double mouseY) {
+    public void onClick(MouseButtonEvent event, boolean doubleClick) {
         this.dragging = true;
-        setFromMouse(mouseX);
+        setFromMouse(event.x());
     }
 
     @Override
-    protected void onDrag(double mouseX, double mouseY, double dragX, double dragY) {
-        setFromMouse(mouseX);
+    protected void onDrag(MouseButtonEvent event, double dragX, double dragY) {
+        setFromMouse(event.x());
     }
 
     @Override
-    public void onRelease(double mouseX, double mouseY) {
+    public void onRelease(MouseButtonEvent event) {
         this.dragging = false;
     }
 

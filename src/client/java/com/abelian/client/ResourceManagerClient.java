@@ -9,10 +9,12 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.PauseScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.TitleScreen;
+import net.minecraft.resources.Identifier;
 import org.lwjgl.glfw.GLFW;
 
 public class ResourceManagerClient implements ClientModInitializer {
-    private static final String CATEGORY = "key.categories.resourcemanager";
+    private static final KeyMapping.Category CATEGORY =
+            KeyMapping.Category.register(Identifier.fromNamespaceAndPath("resourcemanager", "main"));
     private static KeyMapping openKey;
     private static boolean keyWasDown;
 
@@ -41,9 +43,9 @@ public class ResourceManagerClient implements ClientModInitializer {
     private static boolean isKeyDown(Minecraft client) {
         InputConstants.Key key = openKey.getDefaultKey();
         InputConstants.Type type = key.getType();
-        long window = client.getWindow().getWindow();
+        long window = client.getWindow().handle();
         if (type == InputConstants.Type.KEYSYM) {
-            return InputConstants.isKeyDown(window, key.getValue());
+            return InputConstants.isKeyDown(client.getWindow(), key.getValue());
         }
         if (type == InputConstants.Type.MOUSE) {
             return GLFW.glfwGetMouseButton(window, key.getValue()) == GLFW.GLFW_PRESS;

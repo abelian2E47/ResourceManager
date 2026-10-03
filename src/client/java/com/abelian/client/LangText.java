@@ -14,7 +14,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import net.minecraft.locale.Language;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.resources.IoSupplier;
 
 /**
@@ -43,7 +43,7 @@ public final class LangText {
     }
 
     /** Sorted translation keys declared by one file. */
-    public static List<String> keys(String packId, ResourceLocation file, IoSupplier<InputStream> supplier) {
+    public static List<String> keys(String packId, Identifier file, IoSupplier<InputStream> supplier) {
         String cacheKey = cacheKey(packId, file);
         List<String> cached = KEYS.get(cacheKey);
         if (cached != null) {
@@ -57,7 +57,7 @@ public final class LangText {
     }
 
     /** Key to value map declared by one file; empty when the file is missing or broken. */
-    public static Map<String, String> values(String packId, ResourceLocation file, IoSupplier<InputStream> supplier) {
+    public static Map<String, String> values(String packId, Identifier file, IoSupplier<InputStream> supplier) {
         String cacheKey = cacheKey(packId, file);
         Map<String, String> cached = FILES.get(cacheKey);
         if (cached != null) {
@@ -93,7 +93,7 @@ public final class LangText {
         KEYS.clear();
     }
 
-    private static String cacheKey(String packId, ResourceLocation file) {
+    private static String cacheKey(String packId, Identifier file) {
         return packId + "|" + file;
     }
 }

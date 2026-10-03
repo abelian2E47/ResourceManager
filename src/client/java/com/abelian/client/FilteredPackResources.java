@@ -7,7 +7,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.PackLocationInfo;
 import net.minecraft.server.packs.PackResources;
 import net.minecraft.server.packs.PackType;
@@ -45,7 +45,7 @@ public final class FilteredPackResources implements PackResources {
     }
 
     @Override
-    public IoSupplier<InputStream> getResource(PackType type, ResourceLocation location) {
+    public IoSupplier<InputStream> getResource(PackType type, Identifier location) {
         if (ResourceManagerConfig.instance().isDisabled(configId, location.toString())) {
             return null;
         }
@@ -91,7 +91,7 @@ public final class FilteredPackResources implements PackResources {
     /** Reads the sound events declared by a pack's {@code sounds.json}. Used by the GUI. */
     public static Map<String, JsonObject> readSoundEvents(PackResources pack, String namespace) {
         Map<String, JsonObject> events = new LinkedHashMap<>();
-        ResourceLocation location = ResourceLocation.fromNamespaceAndPath(namespace, "sounds.json");
+        Identifier location = Identifier.fromNamespaceAndPath(namespace, "sounds.json");
         IoSupplier<InputStream> supplier = pack.getResource(PackType.CLIENT_RESOURCES, location);
         if (supplier == null) {
             return events;

@@ -6,6 +6,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.network.chat.Component;
+import net.minecraft.client.input.MouseButtonEvent;
 
 /**
  * Base class for the scrollable panels: clipped row rendering, mouse wheel, draggable scrollbar and
@@ -156,19 +157,19 @@ public abstract class ScrollList extends AbstractWidget implements DragTarget {
     }
 
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (button != 0 || !this.active || !this.visible || !isMouseOver(mouseX, mouseY)) {
+    public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
+        if (event.button() != 0 || !this.active || !this.visible || !isMouseOver(event.x(), event.y())) {
             return false;
         }
         playButtonClickSound(Minecraft.getInstance().getSoundManager());
-        if (scrollbarVisible() && mouseX >= scrollbarLeft()) {
+        if (scrollbarVisible() && event.x() >= scrollbarLeft()) {
             this.draggingThumb = true;
-            setScrollFromMouse(mouseY);
+            setScrollFromMouse(event.y());
             return true;
         }
-        int index = rowIndexAt(mouseY);
+        int index = rowIndexAt(event.y());
         if (index >= 0) {
-            clickRow(index, mouseX, mouseY);
+            clickRow(index, event.x(), event.y());
         }
         return true;
     }

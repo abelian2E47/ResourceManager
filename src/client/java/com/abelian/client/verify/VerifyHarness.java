@@ -24,11 +24,16 @@ import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
 import net.minecraft.client.gui.components.AbstractWidget;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.TitleScreen;
+import net.minecraft.client.input.CharacterEvent;
+import net.minecraft.client.input.KeyEvent;
+import net.minecraft.client.input.MouseButtonEvent;
+import net.minecraft.client.input.MouseButtonInfo;
 import net.minecraft.locale.Language;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.contents.TranslatableContents;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.PackResources;
 import net.minecraft.server.packs.resources.Resource;
 import net.minecraft.world.item.ItemStack;
@@ -110,7 +115,7 @@ public final class VerifyHarness implements ClientModInitializer {
     private int outOfBounds;
     private String treeRect = "";
     private String sidebarRight = "";
-    private ResourceLocation servingLocation;
+    private Identifier servingLocation;
     private String servingPack = "";
     private String servingNext = "";
     private String itemLangFile = "";
@@ -139,6 +144,16 @@ public final class VerifyHarness implements ClientModInitializer {
             this.delay--;
             return;
         }
+        try {
+            dispatch(client);
+        } catch (Throwable error) {
+            note("FAIL: the harness threw in step " + this.step + ": " + error);
+            error.printStackTrace();
+            finish(client);
+        }
+    }
+
+    private void dispatch(Minecraft client) {
         switch (this.step) {
             case STEP_TITLE -> stepTitle(client);
             case STEP_SEED -> stepSeed(client);
@@ -401,7 +416,7 @@ public final class VerifyHarness implements ClientModInitializer {
     private void stepSearch(Minecraft client) {
         String query = "redstone_block";
         for (int i = 0; i < query.length(); i++) {
-            client.screen.charTyped(query.charAt(i), 0);
+            typeChar(client.screen, query.charAt(i));
         }
         note("typed \"" + query + "\" into the search box");
         advance(STEP_SELECT, 40);
@@ -410,7 +425,7 @@ public final class VerifyHarness implements ClientModInitializer {
     private void stepSelectFile(Minecraft client) {
         screenshot(client, "verify-03-search.png");
         for (int i = 0; i < 40; i++) {
-            client.screen.keyPressed(GLFW.GLFW_KEY_DOWN, 0, 0);
+            pressKey(client.screen, GLFW.GLFW_KEY_DOWN);
         }
         note("selected the last filtered row with arrow keys");
         dumpTree(client, "redstone_block");
@@ -480,15 +495,15 @@ public final class VerifyHarness implements ClientModInitializer {
     private void stepSound(Minecraft client) {
         focusSearch(client);
         for (int i = 0; i < 48; i++) {
-            client.screen.keyPressed(GLFW.GLFW_KEY_BACKSPACE, 0, 0);
+            pressKey(client.screen, GLFW.GLFW_KEY_BACKSPACE);
         }
         String query = "sounds.json";
         for (int i = 0; i < query.length(); i++) {
-            client.screen.charTyped(query.charAt(i), 0);
+            typeChar(client.screen, query.charAt(i));
         }
         note("typed \"" + query + "\" to reach sound event rows");
         for (int i = 0; i < 30; i++) {
-            client.screen.keyPressed(GLFW.GLFW_KEY_DOWN, 0, 0);
+            pressKey(client.screen, GLFW.GLFW_KEY_DOWN);
         }
         dumpTree(client, "sounds.json");
         advance(STEP_TUNE, 40);
@@ -514,7 +529,7 @@ public final class VerifyHarness implements ClientModInitializer {
 
     private void stepTune(Minecraft client) {
         for (int i = 0; i < 60; i++) {
-            client.screen.keyPressed(GLFW.GLFW_KEY_DOWN, 0, 0);
+            pressKey(client.screen, GLFW.GLFW_KEY_DOWN);
         }
         List<AbstractWidget> sliders = widgets(client).stream()
                 .filter(widget -> widget.getClass().getSimpleName().equals("UiSlider"))
@@ -537,8 +552,8 @@ public final class VerifyHarness implements ClientModInitializer {
                 + slider.getY() + " " + slider.getWidth() + "x" + slider.getHeight() + "] label="
                 + slider.getMessage().getString() + " visible=" + slider.visible + " active=" + slider.active);
         this.tunedBefore = new TreeMap<>(config().sounds());
-        boolean handled = client.screen.mouseClicked(target, y, 0);
-        client.screen.mouseReleased(target, y, 0);
+        boolean handled = click(client.screen, target, y);
+        release(client.screen, target, y);
         Set<String> after = new TreeSet<>(config().sounds().keySet());
         Set<String> added = new TreeSet<>(after);
         added.removeAll(this.tunedBefore.keySet());
@@ -636,7 +651,7 @@ public final class VerifyHarness implements ClientModInitializer {
     }
 
     private void stepLeaveFullscreen(Minecraft client) {
-        client.screen.keyPressed(GLFW.GLFW_KEY_ESCAPE, 0, 0);
+        pressKey(client.screen, GLFW.GLFW_KEY_ESCAPE);
         ResourceManagerScreen gui = screen(client);
         note((gui != null && !gui.disabledFullscreenActive() ? "PASS" : "FAIL")
                 + ": ESC returns from the expanded view and keeps the GUI open (screen=" + name(client.screen) + ")");
@@ -648,7 +663,7 @@ public final class VerifyHarness implements ClientModInitializer {
     private void stepLangSearch(Minecraft client) {
         setSearch(client, "en_us.json");
         for (int i = 0; i < 40; i++) {
-            client.screen.keyPressed(GLFW.GLFW_KEY_DOWN, 0, 0);
+            pressKey(client.screen, GLFW.GLFW_KEY_DOWN);
         }
         dumpTree(client, "en_us.json");
         ResourceManagerScreen gui = screen(client);
@@ -681,19 +696,18 @@ public final class VerifyHarness implements ClientModInitializer {
         filter.setFocused(true);
         client.screen.setFocused(filter);
         for (int i = 0; i < this.langKey.length(); i++) {
-            client.screen.charTyped(this.langKey.charAt(i), 0);
+            typeChar(client.screen, this.langKey.charAt(i));
         }
         TextKeyList list = widget(client, TextKeyList.class);
         ResourceManagerScreen gui = screen(client);
         if (list != null) {
-            client.screen.mouseClicked(list.getX() + 4, list.getY() + 6, 0);
-            client.screen.mouseReleased(list.getX() + 4, list.getY() + 6, 0);
+            clickAt(client.screen, list.getX() + 4, list.getY() + 6);
         }
         note("key row clicked, selected key = " + (gui == null ? "?" : gui.selectedTranslationKey()));
         value.setFocused(true);
         client.screen.setFocused(value);
         for (int i = 0; i < MARKER.length(); i++) {
-            client.screen.charTyped(MARKER.charAt(i), 0);
+            typeChar(client.screen, MARKER.charAt(i));
         }
         click(client, apply);
         note("typed the new text into the value box and clicked Apply");
@@ -737,10 +751,10 @@ public final class VerifyHarness implements ClientModInitializer {
         setSearch(client, "");
         if (textures != null) {
             click(client, textures);
-            client.screen.keyPressed(GLFW.GLFW_KEY_DOWN, 0, 0);
-            client.screen.keyPressed(GLFW.GLFW_KEY_RIGHT, 0, 0);
-            client.screen.keyPressed(GLFW.GLFW_KEY_DOWN, 0, 0);
-            client.screen.keyPressed(GLFW.GLFW_KEY_RIGHT, 0, 0);
+            pressKey(client.screen, GLFW.GLFW_KEY_DOWN);
+            pressKey(client.screen, GLFW.GLFW_KEY_RIGHT);
+            pressKey(client.screen, GLFW.GLFW_KEY_DOWN);
+            pressKey(client.screen, GLFW.GLFW_KEY_RIGHT);
             note("switched the category filter to textures and expanded two levels");
         }
         advance(STEP_TEXTURE_SHOT, 10);
@@ -767,7 +781,7 @@ public final class VerifyHarness implements ClientModInitializer {
         }
         setSearch(client, "redstone_block");
         for (int i = 0; i < 40; i++) {
-            client.screen.keyPressed(GLFW.GLFW_KEY_DOWN, 0, 0);
+            pressKey(client.screen, GLFW.GLFW_KEY_DOWN);
         }
         ResourceManagerScreen gui = screen(client);
         String display = gui == null || gui.selectedNode() == null ? "?" : gui.selectedNode().displayPath();
@@ -794,10 +808,10 @@ public final class VerifyHarness implements ClientModInitializer {
     private void setSearch(Minecraft client, String query) {
         focusSearch(client);
         for (int i = 0; i < 60; i++) {
-            client.screen.keyPressed(GLFW.GLFW_KEY_BACKSPACE, 0, 0);
+            pressKey(client.screen, GLFW.GLFW_KEY_BACKSPACE);
         }
         for (int i = 0; i < query.length(); i++) {
-            client.screen.charTyped(query.charAt(i), 0);
+            typeChar(client.screen, query.charAt(i));
         }
         AbstractWidget search = widgetByKey(client, "resourcemanager.ui.search");
         note("search box now reads \"" + (search instanceof net.minecraft.client.gui.components.EditBox box
@@ -954,7 +968,7 @@ public final class VerifyHarness implements ClientModInitializer {
                     && this.servingPack.equals(node.packId())) {
                 return true;
             }
-            client.screen.keyPressed(GLFW.GLFW_KEY_DOWN, 0, 0);
+            pressKey(client.screen, GLFW.GLFW_KEY_DOWN);
         }
         return false;
     }
@@ -997,7 +1011,7 @@ public final class VerifyHarness implements ClientModInitializer {
             // The search lists the lang file of every pack that ships one, so walk back from the last
             // row until a file that declares the item key with exactly the text the game shows turns up.
             for (int i = 0; i < 40; i++) {
-                client.screen.keyPressed(GLFW.GLFW_KEY_DOWN, 0, 0);
+                pressKey(client.screen, GLFW.GLFW_KEY_DOWN);
             }
             for (int i = 0; i < 140; i++) {
                 if (gui.translationKeys().contains(ITEM_KEY) && this.itemText.equals(gui.fileTranslationValue(ITEM_KEY))) {
@@ -1007,7 +1021,7 @@ public final class VerifyHarness implements ClientModInitializer {
                     advance(STEP_ITEM_SEARCH, 5);
                     return;
                 }
-                client.screen.keyPressed(GLFW.GLFW_KEY_UP, 0, 0);
+                pressKey(client.screen, GLFW.GLFW_KEY_UP);
             }
         }
         note("SKIP: no loaded lang file declares " + ITEM_KEY + " as \"" + this.itemText + "\" (language " + active + ")");
@@ -1034,8 +1048,7 @@ public final class VerifyHarness implements ClientModInitializer {
         }
         TextKeyList list = widget(client, TextKeyList.class);
         if (list != null) {
-            client.screen.mouseClicked(list.getX() + 4, list.getY() + 6, 0);
-            client.screen.mouseReleased(list.getX() + 4, list.getY() + 6, 0);
+            clickAt(client.screen, list.getX() + 4, list.getY() + 6);
         }
         note("clicked the key row, the editor now edits " + gui.selectedTranslationKey());
         // Clean shot for the docs: filtered by the name an item shows, with the value column visible.
@@ -1055,7 +1068,7 @@ public final class VerifyHarness implements ClientModInitializer {
         value.setFocused(true);
         client.screen.setFocused(value);
         for (int i = 0; i < ITEM_MARKER.length(); i++) {
-            client.screen.charTyped(ITEM_MARKER.charAt(i), 0);
+            typeChar(client.screen, ITEM_MARKER.charAt(i));
         }
         click(client, apply);
         note("typed the new item name and clicked Apply, the editor now edits "
@@ -1096,7 +1109,7 @@ public final class VerifyHarness implements ClientModInitializer {
     private void stepEsc(Minecraft client) {
         note("screen after reload = " + name(client.screen));
         screenshot(client, "verify-06-after-reload.png");
-        client.screen.keyPressed(GLFW.GLFW_KEY_ESCAPE, 0, 0);
+        pressKey(client.screen, GLFW.GLFW_KEY_ESCAPE);
         note("pressed ESC, screen is now " + name(client.screen));
         note((client.screen instanceof com.abelian.client.ResourceManagerScreen ? "FAIL" : "PASS")
                 + ": ESC closes the GUI without a crash");
@@ -1165,6 +1178,7 @@ public final class VerifyHarness implements ClientModInitializer {
         this.step = next;
         this.ticksInStep = 0;
         this.delay = delayTicks;
+        note("step -> " + next);
     }
 
     private String name(Object screen) {
@@ -1216,20 +1230,41 @@ public final class VerifyHarness implements ClientModInitializer {
         return null;
     }
 
+    // 1.21.9 moved input handling to event records; these keep the steps readable.
+    private static void pressKey(Screen screen, int keyCode) {
+        screen.keyPressed(new KeyEvent(keyCode, 0, 0));
+    }
+
+    private static void typeChar(Screen screen, char character) {
+        screen.charTyped(new CharacterEvent(character, 0));
+    }
+
+    private static boolean click(Screen screen, double x, double y) {
+        return screen.mouseClicked(new MouseButtonEvent(x, y, new MouseButtonInfo(0, 0)), false);
+    }
+
+    private static void release(Screen screen, double x, double y) {
+        screen.mouseReleased(new MouseButtonEvent(x, y, new MouseButtonInfo(0, 0)));
+    }
+
+    private static void clickAt(Screen screen, double x, double y) {
+        click(screen, x, y);
+        release(screen, x, y);
+    }
+
     private void click(Minecraft client, AbstractWidget widget) {
         int x = widget.getX() + widget.getWidth() / 2;
         int y = widget.getY() + widget.getHeight() / 2;
-        client.screen.mouseClicked(x, y, 0);
-        client.screen.mouseReleased(x, y, 0);
+        clickAt(client.screen, x, y);
     }
 
     private void screenshot(Minecraft client, String name) {
-        Screenshot.grab(client.gameDirectory, name, client.getMainRenderTarget(), message -> {
+        Screenshot.grab(client.gameDirectory, name, client.getMainRenderTarget(), 1, message -> {
         });
     }
 
     private String sourceOf(Minecraft client, String location) {
-        ResourceLocation id = ResourceLocation.tryParse(location);
+        Identifier id = Identifier.tryParse(location);
         if (id == null) {
             return "<bad id>";
         }

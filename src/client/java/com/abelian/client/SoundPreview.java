@@ -5,7 +5,7 @@ import net.minecraft.client.resources.sounds.Sound;
 import net.minecraft.client.resources.sounds.SoundInstance;
 import net.minecraft.client.sounds.SoundManager;
 import net.minecraft.client.sounds.WeighedSoundEvents;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.sounds.SoundSource;
 
 /**
@@ -45,7 +45,7 @@ public final class SoundPreview {
     private SoundPreview() {
     }
 
-    public static Availability availability(SoundManager manager, ResourceLocation id) {
+    public static Availability availability(SoundManager manager, Identifier id) {
         WeighedSoundEvents events = manager.getSoundEvent(id);
         if (events == null) {
             return Availability.UNKNOWN;
@@ -64,7 +64,7 @@ public final class SoundPreview {
      * A relative, non attenuated instance: the preview is audible wherever the player stands and is not
      * muted by distance. Volume and pitch stay at 1 so the tuning mixin applies the configured factors.
      */
-    public static SoundInstance create(ResourceLocation id) {
+    public static SoundInstance create(Identifier id) {
         return new SimpleSoundInstance(id, SoundSource.MASTER, 1.0F, 1.0F, SoundInstance.createUnseededRandom(),
                 false, 0, SoundInstance.Attenuation.NONE, 0.0, 0.0, 0.0, true);
     }
