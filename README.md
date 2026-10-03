@@ -1,6 +1,6 @@
 # ResourceManager
 
-**An in-game resource pack debugger for Minecraft 1.21.4 (Fabric).**
+**An in-game resource pack debugger for Minecraft 1.21.1 (Fabric).**
 
 Open it with **F8**, browse every enabled pack as a file-manager style tree, and switch off a single
 texture, model, sound or UI sprite: that pack stops providing the one file and the next pack in the
@@ -53,7 +53,7 @@ like your own — the change stays on your machine.
 
 | | |
 | --- | --- |
-| Minecraft | 1.21.4 |
+| Minecraft | 1.21.1 |
 | Fabric Loader | 0.16.14 or newer |
 | Fabric API | required |
 | Java | 21 |
@@ -277,7 +277,7 @@ to its pre-run state (disabled, sounds and texts).
 $env:RESOURCEMANAGER_VERIFY = "1"; .\gradlew.bat runClient     # exits the client when done
 ```
 
-Last run: 43 assertions, all `PASS`, 15 screenshots, about a minute. Sample report lines:
+Last run: 32 assertions PASS, 4 SKIP (external packs do not load here), 13 screenshots, about a minute. Sample report lines:
 
 ```
 PASS: a disabled file is no longer served by that pack (file/Squareful ….zip -> vanilla)
