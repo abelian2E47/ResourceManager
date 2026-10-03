@@ -13,6 +13,7 @@
 
   "resourcemanager.ui.panel.filters": "筛选",
   "resourcemanager.ui.panel.disabled": "已禁用 (%s)",
+  "resourcemanager.ui.panel.disabledFiltered": "已禁用 (%s/%s)",
   "resourcemanager.ui.panel.tree": "资源树",
   "resourcemanager.ui.panel.inspector": "检查器",
   "resourcemanager.ui.panel.inspector.text": "文本编辑",
@@ -42,7 +43,7 @@
   "resourcemanager.ui.status.loaded": "%s 个文件 · %s 个资源包 · %s 个音效事件",
   "resourcemanager.ui.status.disabledCount": "已禁用 %s",
   "resourcemanager.ui.status.textCount": "%s 处文本改动",
-  "resourcemanager.ui.status.pending": "%s 项改动未应用 — 点击“重载资源包”生效",
+  "resourcemanager.ui.status.pending": "%s 项改动尚未生效 —— 点击「重载资源包」",
   "resourcemanager.ui.status.restored": "已恢复 %s",
   "resourcemanager.ui.status.langFile": "%s 条文本键 — 选一条即可编辑",
   "resourcemanager.ui.hints": "回车切换禁用 · 方向键浏览 · 双击展开",
@@ -67,6 +68,9 @@
   "resourcemanager.ui.text.applied": "已应用 %s",
   "resourcemanager.ui.text.reverted": "已还原 %s",
   "resourcemanager.ui.text.noKey": "请先选择一个文本键",
+  "resourcemanager.ui.text.addKey": "添加键",
+  "resourcemanager.ui.text.addKeyHint": "先在过滤框里填入一个键，例如 item.minecraft.diamond_sword",
+  "resourcemanager.ui.text.addedKey": "正在编辑 %s（没有已加载文件声明它）",
 
   "resourcemanager.ui.preview.unknown": "事件 %s 未被当前 sounds.json 提供（可能被更高优先级资源包覆盖）",
   "resourcemanager.ui.preview.empty": "事件 %s 没有可用的声音文件",
@@ -75,6 +79,8 @@
   "resourcemanager.ui.preview.starting": "正在试听：%s",
   "resourcemanager.ui.preview.playing": "正在播放 %s",
   "resourcemanager.ui.preview.silent": "试听未开始：%s（音量为 0 或没有音频设备）",
+  "resourcemanager.ui.preview.effective": "当前生效",
+  "resourcemanager.ui.preview.ownCopy": "本包副本（未生效）",
 
   "resourcemanager.ui.info.pack": "资源包",
   "resourcemanager.ui.info.type": "类型",
@@ -86,6 +92,11 @@
   "resourcemanager.ui.info.fileValue": "文件内",
   "resourcemanager.ui.info.effectiveValue": "游戏中",
   "resourcemanager.ui.info.providers": "提供者",
+  "resourcemanager.ui.info.serving": "生效来源",
+  "resourcemanager.ui.info.servingPending": "%s —— 重载后：%s",
+  "resourcemanager.ui.info.servingNone": "当前没有任何资源包提供",
+  "resourcemanager.ui.info.source": "来源",
+  "resourcemanager.ui.info.sourceServer": "由服务器下发",
   "resourcemanager.ui.info.state": "状态",
 
   "resourcemanager.ui.type.pack": "资源包",

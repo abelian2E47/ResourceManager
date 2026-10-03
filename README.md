@@ -29,9 +29,14 @@ in game immediately. Everything you change lives in one config file and survives
 - **Texture preview** — the inspector renders the selected image at an integer scale, with its real
   size next to it, using the pack that owns the file.
 - **Text editing** — edit any `lang` key and see the change in game at once, including text that was
-  already drawn; **Revert** drops the override and the pack's own text comes back.
+  already drawn (item names, tooltips, GUI labels). The key list shows the text each key produces and
+  the filter matches it, so you can search for `Diamond Sword` instead of the key.
 - **Full screen disabled view** — the "Full" button in the DISABLED panel turns the sidebar list into
   a two-column window-wide view with mouse and keyboard navigation.
+
+The mod is client side only: it changes what **your** client loads and renders and never talks to the
+server or the world. Packs the server pushes are labelled as such and can be switched off locally just
+like your own — the change stays on your machine.
 
 ## Screenshots
 
@@ -114,8 +119,34 @@ Your values are multiplied into the real sound playback, so in-game audio change
 ### Texture preview
 
 Any image file renders in the inspector above its metadata, scaled by an integer factor (never
-blurred, up to 6×) and labelled with its source size. The pixels come from the pack that owns the
-file, so you can look at a copy that is currently shadowed by a pack above it.
+blurred, up to 6×). The pixels are the ones the game actually uses — they are fetched from the running
+resource manager, so as soon as pack A's copy is disabled the preview shows the copy pack B provides.
+The caption inside the frame says which of the two you are looking at (`in use now`, or
+`this pack's copy (not served)` when nothing serves the file any more), and the source size sits next
+to it.
+
+### What the inspector reports, and why it can be trusted
+
+Everything it shows is derived from live state instead of a private cache:
+
+| Line | Source |
+| --- | --- |
+| `Pack`, `Type`, `Files` | the scan of the loaded packs |
+| `Providers` | every pack that ships this file, highest priority first, with the pack that wins once the packs are reloaded |
+| `Effective source` | asked from the running resource manager right now — the authoritative answer |
+| `State` | `Active` / `Shadowed by …` / `Disabled (lower packs can provide it)` from your config |
+| `Source` | shown when the pack was pushed by the server (`server/…` ids); disabling it is a local override |
+
+Three consequences worth knowing:
+
+* The tree is built by listing the packs themselves, not the resource manager's filtered view, so a
+  file you disabled **keeps its row** after a reload — otherwise it would drop out of the tree and you
+  could not inspect or enable it again.
+* The GUI notices when the game reloads resources on its own (`F3+T`, ticking a pack in the options
+  screen, joining a world) and rescans, instead of reporting an index that no longer describes the
+  game.
+* Reopening the GUI paints the previous scan at once and refreshes in the background, so the window is
+  never empty waiting for the scan.
 
 ### Text editing
 
@@ -125,8 +156,20 @@ keys carry a ✎), and a value box with **Apply** / **Revert** at the bottom.
 
 ![Text editor](docs/screenshot-text-editor.png)
 
-Applied text takes effect at once for every place that uses the key, including components that were
-already rendered. **Revert** removes the override so the pack (or vanilla) text is used again.
+The key list shows each key together with the text the game displays for it, and the filter matches
+both, so you can go from what you see to the key that produces it: type `Diamond Sword` (or
+`钻石剑`) and `item.minecraft.diamond_sword` shows up. That covers everything the game renders through
+a translation key — item and block names, tooltips, enchantments, GUI labels, death messages, and the
+names mods add. Type a new value and press **Apply**; **Revert** removes the override so the pack (or
+vanilla) text is used again. Edits are stored per key, so they apply whatever pack or language file
+declares them.
+
+If no loaded file declares the key you are after — a mod string that has no translation yet, say — put
+the key itself into the filter box (`item.minecraft.diamond_sword`) and press **Add key**: the inspector
+starts editing it anyway, and the override is served just like any other.
+
+Item names really change in game: the name in the tooltip, in the inventory, in chat, and in the item
+count of the hotbar all resolve through that key.
 
 ## Keyboard & mouse
 
@@ -221,15 +264,20 @@ out-of-bounds widgets in both a compact and a wide window, a disabled file reall
 next pack, re-enabling restores the original provider, a slider click is stored in the config, the
 category filter leaves only `textures/` paths, a `lang` file is recognised as text and an edit takes
 effect immediately (and reverting brings the pack text back), the texture thumbnail really renders at
-its size, the disabled column expands to the whole window, and `ESC` returns from it. Screenshots go
-to `run/screenshots/`, the report to `run/verify-report.txt`, and the config is restored to its
-pre-run state (disabled, sounds and texts).
+its size, the disabled column expands to the whole window, and `ESC` returns from it. It also covers
+the display accuracy work: it disables a file whose own pack currently wins, then checks that the live
+manager answers with the lower pack, that the inspector's `Effective source` line agrees with it (no
+divergence marker), and that after a reload the disabled file is still listed in the tree. Finally it
+edits a real item name: it reads the name a diamond sword shows, searches the key list by that text,
+applies an override and asserts that the item stack itself reports the new name, then reverts it.
+Screenshots go to `run/screenshots/`, the report to `run/verify-report.txt`, and the config is restored
+to its pre-run state (disabled, sounds and texts).
 
 ```powershell
 $env:RESOURCEMANAGER_VERIFY = "1"; .\gradlew.bat runClient     # exits the client when done
 ```
 
-Last run: 21 assertions, all `PASS`, 11 screenshots, about a minute. Sample report lines:
+Last run: 43 assertions, all `PASS`, 15 screenshots, about a minute. Sample report lines:
 
 ```
 PASS: a disabled file is no longer served by that pack (file/Squareful ….zip -> vanilla)
@@ -245,6 +293,15 @@ PASS: the lang file is recognised as a text resource (path realms:lang/en_us.jso
 PASS: the edited text takes effect immediately, including on cached components
 PASS: the texture category only keeps textures (minecraft:textures/block/acacia_door3d_bottom.png)
 PASS: the inspector renders a thumbnail of the selected texture (16x16)
+PASS: the live manager answers with the lower pack (Squareful ….zip)
+PASS: the file is no longer answered by its own pack (§cCozyUI§b+ ….zip)
+PASS: the inspector agrees with the live manager, with no divergence marker
+PASS: the disabled file is still listed in the tree after the reload (…|appleskin:textures/icons.png)
+PASS: the thumbnail shows the file the game serves
+PASS: searching by the text you see in game finds the key behind it
+PASS: the item name override is stored in the config
+PASS: the item really displays the new name in game (was "Diamond Sword")
+PASS: reverting brings the original item name back
 ```
 
 > The harness ships inside the jar, but its entry point checks the environment variable first and

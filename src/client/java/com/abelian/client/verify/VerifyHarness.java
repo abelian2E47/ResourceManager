@@ -1,7 +1,9 @@
 package com.abelian.client.verify;
 
+import com.abelian.client.ResourceIndex;
 import com.abelian.client.ResourceManagerConfig;
 import com.abelian.client.ResourceManagerScreen;
+import com.abelian.client.ResourceNode;
 import com.abelian.client.ui.DisabledList;
 import com.abelian.client.ui.TextKeyList;
 import com.abelian.client.ui.TreeView;
@@ -9,6 +11,7 @@ import com.abelian.client.ui.UiButton;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -28,6 +31,8 @@ import net.minecraft.network.chat.contents.TranslatableContents;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.PackResources;
 import net.minecraft.server.packs.resources.Resource;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import org.lwjgl.glfw.GLFW;
 
 /**
@@ -38,6 +43,9 @@ public final class VerifyHarness implements ClientModInitializer {
     private static final boolean ENABLED = System.getenv("RESOURCEMANAGER_VERIFY") != null;
     private static final String TEXTURE = "minecraft:textures/block/redstone_block.png";
     private static final String MARKER = "RM_VERIFY_LANG_VALUE";
+    /** The key behind a diamond sword's name, and the name the self check gives it. */
+    private static final String ITEM_KEY = "item.minecraft.diamond_sword";
+    private static final String ITEM_MARKER = "RM_VERIFY_ITEM_NAME";
     private static final int TOOLBAR_BOTTOM = 28;
 
     private static final int STEP_TITLE = 0;
@@ -69,9 +77,17 @@ public final class VerifyHarness implements ClientModInitializer {
     private static final int STEP_TEXTURE = 26;
     private static final int STEP_TEXTURE_SHOT = 27;
     private static final int STEP_TEXTURE_CHECK = 28;
-    private static final int STEP_RELOAD = 29;
-    private static final int STEP_ESC = 30;
-    private static final int STEP_DONE = 31;
+    private static final int STEP_SERVING_PICK = 29;
+    private static final int STEP_SERVING_CHECK = 30;
+    private static final int STEP_RELOAD = 31;
+    private static final int STEP_SERVING_AFTER = 32;
+    private static final int STEP_ITEM_TEXT = 33;
+    private static final int STEP_ITEM_SEARCH = 34;
+    private static final int STEP_ITEM_EDIT = 35;
+    private static final int STEP_ITEM_CHECK = 36;
+    private static final int STEP_ITEM_REVERT = 37;
+    private static final int STEP_ESC = 38;
+    private static final int STEP_DONE = 39;
 
     private final List<String> lines = new ArrayList<>();
     private int step = STEP_TITLE;
@@ -94,6 +110,12 @@ public final class VerifyHarness implements ClientModInitializer {
     private int outOfBounds;
     private String treeRect = "";
     private String sidebarRight = "";
+    private ResourceLocation servingLocation;
+    private String servingPack = "";
+    private String servingNext = "";
+    private String itemLangFile = "";
+    private String itemText = "";
+    private String itemOriginal = "";
 
     @Override
     public void onInitializeClient() {
@@ -147,7 +169,15 @@ public final class VerifyHarness implements ClientModInitializer {
             case STEP_TEXTURE -> stepTexture(client);
             case STEP_TEXTURE_SHOT -> stepCategoryShot(client);
             case STEP_TEXTURE_CHECK -> stepCheckTexture(client);
+            case STEP_SERVING_PICK -> stepServingPick(client);
+            case STEP_SERVING_CHECK -> stepCheckServing(client);
             case STEP_RELOAD -> stepReload(client);
+            case STEP_SERVING_AFTER -> stepServingAfterReload(client);
+            case STEP_ITEM_TEXT -> stepItemText(client);
+            case STEP_ITEM_SEARCH -> stepItemSearch(client);
+            case STEP_ITEM_EDIT -> stepItemEdit(client);
+            case STEP_ITEM_CHECK -> stepCheckItemName(client);
+            case STEP_ITEM_REVERT -> stepRevertItemName(client);
             case STEP_ESC -> stepEsc(client);
             default -> finish(client);
         }
@@ -753,7 +783,7 @@ public final class VerifyHarness implements ClientModInitializer {
         note((ready ? "PASS" : "FAIL") + ": the inspector renders a thumbnail of the selected texture ("
                 + (gui == null ? "" : gui.previewSize()) + ")");
         screenshot(client, "verify-10-texture-preview.png");
-        advance(STEP_RELOAD, 5);
+        advance(STEP_SERVING_PICK, 5);
     }
 
     private ResourceManagerScreen screen(Minecraft client) {
@@ -783,12 +813,284 @@ public final class VerifyHarness implements ClientModInitializer {
         UiButton reload = button(client, "resourcemanager.ui.reload");
         if (reload == null) {
             note("FAIL: reload button missing");
-            advance(STEP_ESC, 5);
+            advance(STEP_ITEM_TEXT, 5);
             return;
         }
         note("clicking \"reload packs\"");
         click(client, reload);
-        advance(STEP_ESC, 200);
+        advance(STEP_SERVING_AFTER, 200);
+    }
+
+    /**
+     * Picks a file whose current winner is its own pack, so disabling it really moves which pack serves
+     * it, and disables it through the config. Nothing is reloaded yet: the GUI has to say so.
+     */
+    private void stepServingPick(Minecraft client) {
+        ResourceIndex.Snapshot snapshot = ResourceIndex.cachedSnapshot();
+        if (snapshot == null) {
+            note("SKIP: no scan to pick a serving target from");
+            advance(STEP_SERVING_CHECK, 5);
+            return;
+        }
+        ResourceNode target = null;
+        String next = "";
+        for (ResourceNode packNode : snapshot.packNodesHighestFirst()) {
+            for (ResourceNode node : filesUnder(packNode)) {
+                if (!node.isFile() || node.location() == null || !node.path().endsWith(".png")) {
+                    continue;
+                }
+                if (config().isDisabled(node.packId(), node.resourceId())) {
+                    continue;
+                }
+                List<ResourceNode> providers = snapshot.providersOf(node.location());
+                if (providers.size() < 2) {
+                    continue;
+                }
+                // Priority 1 is the highest priority pack, so the current winner is the smallest number.
+                int top = providers.stream().mapToInt(provider -> priorityOf(snapshot, provider))
+                        .min().orElse(Integer.MAX_VALUE);
+                if (priorityOf(snapshot, node) != top) {
+                    continue;
+                }
+                int topPriority = top;
+                ResourceNode second = providers.stream()
+                        .filter(provider -> priorityOf(snapshot, provider) > topPriority)
+                        .min(Comparator.comparingInt(provider -> priorityOf(snapshot, provider))).orElse(null);
+                if (second == null) {
+                    continue;
+                }
+                target = node;
+                next = second.packId();
+                break;
+            }
+            if (target != null) {
+                break;
+            }
+        }
+        if (target == null) {
+            note("SKIP: no two provider texture is currently served by its own pack");
+            advance(STEP_SERVING_CHECK, 5);
+            return;
+        }
+        this.servingLocation = target.location();
+        this.servingPack = target.packId();
+        this.servingNext = next;
+        note("serving target: " + this.servingPack + "|" + this.servingLocation
+                + " should fall back to " + this.servingNext + " after a reload");
+        config().setDisabledKey(ResourceManagerConfig.key(this.servingPack, this.servingLocation.toString()), true);
+        config().save();
+        advance(STEP_SERVING_CHECK, 10);
+    }
+
+    /**
+     * The live manager answers with the pack the config points at, straight away: the filter sits in the
+     * pack wrapper, so resource lookups follow the config while the loaded textures wait for a reload.
+     */
+    private void stepCheckServing(Minecraft client) {
+        ResourceManagerScreen gui = screen(client);
+        if (this.servingLocation == null) {
+            note("SKIP: no serving target was picked");
+            advance(STEP_RELOAD, 5);
+            return;
+        }
+        if (gui == null || !selectServingTarget(client, gui)) {
+            note("FAIL: could not select the serving target in the tree");
+            advance(STEP_RELOAD, 5);
+            return;
+        }
+        String serving = gui.servingPackId();
+        String winner = gui.winnerPackId();
+        String text = gui.servingText();
+        note("effective source line before the reload: \"" + text + "\"");
+        note((this.servingNext.equals(serving) ? "PASS" : "FAIL")
+                + ": the live manager answers with the lower pack (" + serving + ")");
+        note((this.servingNext.equals(winner) ? "PASS" : "FAIL")
+                + ": the config points at the same pack (" + winner + ")");
+        note((!this.servingPack.equals(serving) ? "PASS" : "FAIL")
+                + ": the file is no longer answered by its own pack (" + this.servingPack + ")");
+        note((text.equals(serving) ? "PASS" : "FAIL")
+                + ": the inspector agrees with the live manager, with no divergence marker");
+        screenshot(client, "verify-12-effective-source.png");
+        advance(STEP_RELOAD, 5);
+    }
+
+    /** After the reload the answer must hold, and the disabled file has to still be listed. */
+    private void stepServingAfterReload(Minecraft client) {
+        ResourceManagerScreen gui = screen(client);
+        if (this.servingLocation == null) {
+            note("SKIP: no serving target was picked");
+            advance(STEP_ITEM_TEXT, 5);
+            return;
+        }
+        if (gui == null || !selectServingTarget(client, gui)) {
+            note("FAIL: could not select the serving target after the reload");
+            advance(STEP_ITEM_TEXT, 5);
+            return;
+        }
+        String serving = gui.servingPackId();
+        String text = gui.servingText();
+        note("effective source line after the reload: \"" + text + "\"");
+        note("PASS: the disabled file is still listed in the tree after the reload ("
+                + this.servingPack + "|" + this.servingLocation + "), so it can be inspected and enabled");
+        note((this.servingNext.equals(serving) ? "PASS" : "FAIL")
+                + ": the live manager serves the file from the lower pack now (" + serving + ")");
+        note((text.equals(serving) ? "PASS" : "FAIL")
+                + ": the inspector reports it as in effect, with no divergence marker");
+        note((gui.previewFromEffective() ? "PASS" : "FAIL")
+                + ": the thumbnail shows the file the game serves");
+        screenshot(client, "verify-13-serving-after.png");
+        advance(STEP_ITEM_TEXT, 5);
+    }
+
+    /** Walks the filtered tree until the file row of the target pack is selected. */
+    private boolean selectServingTarget(Minecraft client, ResourceManagerScreen gui) {
+        if (this.servingLocation == null) {
+            return false;
+        }
+        setSearch(client, this.servingLocation.getPath());
+        for (int i = 0; i < 400; i++) {
+            ResourceNode node = gui.selectedNode();
+            if (node != null && this.servingLocation.equals(node.location())
+                    && this.servingPack.equals(node.packId())) {
+                return true;
+            }
+            client.screen.keyPressed(GLFW.GLFW_KEY_DOWN, 0, 0);
+        }
+        return false;
+    }
+
+    private List<ResourceNode> filesUnder(ResourceNode node) {
+        List<ResourceNode> found = new ArrayList<>();
+        for (ResourceNode child : node.children()) {
+            if (child.isFile()) {
+                found.add(child);
+            }
+            found.addAll(filesUnder(child));
+        }
+        return found;
+    }
+
+    private int priorityOf(ResourceIndex.Snapshot snapshot, ResourceNode node) {
+        ResourceNode pack = snapshot.packNode(node.packId());
+        return pack == null ? -1 : pack.priority();
+    }
+
+    // ------------------------------------------------------------------ in game text (item names)
+
+    /** Selects a {@code lang} file that declares item names, preferring the active language. */
+    private void stepItemText(Minecraft client) {
+        ResourceManagerScreen gui = screen(client);
+        if (gui == null) {
+            note("SKIP: the GUI is not open, the item name check needs it");
+            advance(STEP_ESC, 5);
+            return;
+        }
+        this.itemOriginal = Language.getInstance().getOrDefault(ITEM_KEY, "");
+        this.itemText = new ItemStack(Items.DIAMOND_SWORD).getHoverName().getString();
+        note("a diamond sword shows \"" + this.itemText + "\" in game (key " + ITEM_KEY + ")");
+        String active = client.getLanguageManager().getSelected();
+        for (String language : new String[] { active, "en_us", "zh_cn" }) {
+            if (language == null || language.isEmpty()) {
+                continue;
+            }
+            setSearch(client, "lang/" + language + ".json");
+            // The search lists the lang file of every pack that ships one, so walk back from the last
+            // row until a file that declares the item key with exactly the text the game shows turns up.
+            for (int i = 0; i < 40; i++) {
+                client.screen.keyPressed(GLFW.GLFW_KEY_DOWN, 0, 0);
+            }
+            for (int i = 0; i < 140; i++) {
+                if (gui.translationKeys().contains(ITEM_KEY) && this.itemText.equals(gui.fileTranslationValue(ITEM_KEY))) {
+                    this.itemLangFile = gui.selectedNode() == null ? "" : gui.selectedNode().displayPath();
+                    note("picked " + this.itemLangFile + " with " + gui.translationKeys().size()
+                            + " keys; it declares " + ITEM_KEY + " = \"" + this.itemText + "\"");
+                    advance(STEP_ITEM_SEARCH, 5);
+                    return;
+                }
+                client.screen.keyPressed(GLFW.GLFW_KEY_UP, 0, 0);
+            }
+        }
+        note("SKIP: no loaded lang file declares " + ITEM_KEY + " as \"" + this.itemText + "\" (language " + active + ")");
+        advance(STEP_ESC, 5);
+    }
+
+    /** Filters the key list by the name the item shows in game, not by its key. */
+    private void stepItemSearch(Minecraft client) {
+        ResourceManagerScreen gui = screen(client);
+        if (gui == null) {
+            note("SKIP: the GUI is not open");
+            advance(STEP_ESC, 5);
+            return;
+        }
+        gui.setTextFilter(this.itemText);
+        List<String> visible = gui.visibleTranslationKeys();
+        note("filtering the key list by that text leaves " + visible.size() + " keys, first: "
+                + (visible.isEmpty() ? "-" : visible.get(0)));
+        note((visible.contains(ITEM_KEY) ? "PASS" : "FAIL")
+                + ": searching by the text you see in game finds the key behind it");
+        if (!visible.contains(ITEM_KEY)) {
+            advance(STEP_ESC, 5);
+            return;
+        }
+        TextKeyList list = widget(client, TextKeyList.class);
+        if (list != null) {
+            client.screen.mouseClicked(list.getX() + 4, list.getY() + 6, 0);
+            client.screen.mouseReleased(list.getX() + 4, list.getY() + 6, 0);
+        }
+        note("clicked the key row, the editor now edits " + gui.selectedTranslationKey());
+        // Clean shot for the docs: filtered by the name an item shows, with the value column visible.
+        screenshot(client, "verify-15-text-editor.png");
+        advance(STEP_ITEM_EDIT, 5);
+    }
+
+    private void stepItemEdit(Minecraft client) {
+        AbstractWidget value = widgetByKey(client, "resourcemanager.ui.text.value");
+        UiButton apply = button(client, "resourcemanager.ui.text.apply");
+        ResourceManagerScreen gui = screen(client);
+        if (value == null || apply == null || gui == null) {
+            note("SKIP: the text editor widgets are not visible");
+            advance(STEP_ESC, 5);
+            return;
+        }
+        value.setFocused(true);
+        client.screen.setFocused(value);
+        for (int i = 0; i < ITEM_MARKER.length(); i++) {
+            client.screen.charTyped(ITEM_MARKER.charAt(i), 0);
+        }
+        click(client, apply);
+        note("typed the new item name and clicked Apply, the editor now edits "
+                + gui.selectedTranslationKey());
+        advance(STEP_ITEM_CHECK, 10);
+    }
+
+    private void stepCheckItemName(Minecraft client) {
+        String override = config().texts().get(ITEM_KEY);
+        String resolved = Language.getInstance().getOrDefault(ITEM_KEY, "");
+        String shown = new ItemStack(Items.DIAMOND_SWORD).getHoverName().getString();
+        note("config override for " + ITEM_KEY + " = " + override);
+        note("the language lookup resolves it to \"" + resolved + "\"");
+        note("a diamond sword now shows \"" + shown + "\"");
+        note((ITEM_MARKER.equals(override) ? "PASS" : "FAIL") + ": the item name override is stored in the config");
+        note((ITEM_MARKER.equals(shown) ? "PASS" : "FAIL")
+                + ": the item really displays the new name in game (was \"" + this.itemOriginal + "\")");
+        screenshot(client, "verify-14-item-name.png");
+        advance(STEP_ITEM_REVERT, 5);
+    }
+
+    private void stepRevertItemName(Minecraft client) {
+        UiButton revert = button(client, "resourcemanager.ui.text.revert");
+        if (revert == null) {
+            note("SKIP: no revert button");
+            advance(STEP_ESC, 5);
+            return;
+        }
+        click(client, revert);
+        String override = config().texts().get(ITEM_KEY);
+        String shown = new ItemStack(Items.DIAMOND_SWORD).getHoverName().getString();
+        note("after revert: override = " + override + ", the sword shows \"" + shown + "\"");
+        note((override == null && shown.equals(this.itemOriginal) ? "PASS" : "FAIL")
+                + ": reverting brings the original item name back");
+        advance(STEP_ESC, 5);
     }
 
     private void stepEsc(Minecraft client) {

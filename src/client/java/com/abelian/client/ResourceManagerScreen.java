@@ -61,6 +61,11 @@ public final class ResourceManagerScreen extends Screen implements TreeView.Host
     private static final long BULK_CONFIRM_MILLIS = 4000L;
     /** How long a fresh status message keeps its slot in the status bar. */
     private static final long STATUS_HOLD_MILLIS = 4000L;
+    /**
+     * Grace period after the runtime swaps its resource manager (F3+T, options screen, world change)
+     * before the scan runs again, so the reload is not scanned while it is still in flight.
+     */
+    private static final long RESCAN_DELAY_MILLIS = 250L;
 
     private final Screen parent;
     private final ResourceManagerConfig config = ResourceManagerConfig.instance();
@@ -101,6 +106,7 @@ public final class ResourceManagerScreen extends Screen implements TreeView.Host
     private TextKeyList textKeyList;
     private UiButton textApplyButton;
     private UiButton textRevertButton;
+    private UiButton textAddKeyButton;
     private final List<UiButton> filterButtons = new ArrayList<>();
     private final PreviewTexture preview = new PreviewTexture();
 
@@ -111,6 +117,8 @@ public final class ResourceManagerScreen extends Screen implements TreeView.Host
     private String statusMessage = "";
     private String lastStatusMessage = "";
     private long statusMessageTime;
+    /** Non-zero while a rescan is scheduled because the runtime replaced its resource manager. */
+    private long rescanAt;
     private String statusDetail = "";
 
     private ResourceNode selected;
@@ -133,6 +141,8 @@ public final class ResourceManagerScreen extends Screen implements TreeView.Host
 
     /** Identity of what the thumbnail currently shows, so the pixels are read only when it changes. */
     private String previewIdentity = "";
+    /** True when the previewed pixels come from the live manager (the file the game serves). */
+    private boolean previewFromEffective;
     /** Keys of the {@code lang} file selected in the inspector, and the filtered subset that is drawn. */
     private List<String> langKeys = List.of();
     private List<String> langKeysFiltered = List.of();
@@ -237,9 +247,19 @@ public final class ResourceManagerScreen extends Screen implements TreeView.Host
                 Component.translatable("resourcemanager.ui.text.apply"), this::applyTextEdit));
         this.textRevertButton = addRenderableWidget(new UiButton(this.font, 0, 0, 40, BUTTON,
                 Component.translatable("resourcemanager.ui.text.revert"), this::revertTextEdit));
+        this.textAddKeyButton = addRenderableWidget(new UiButton(this.font, 0, 0, 40, BUTTON,
+                Component.translatable("resourcemanager.ui.text.addKey"), this::addTextKey));
 
         layout();
-        if (this.snapshot == null && !this.scanning) {
+        // Show the previous scan at once when there is one, then refresh from the live manager: the
+        // window is never empty waiting for the scan, and never keeps answering from a stale index.
+        if (this.snapshot == null) {
+            ResourceIndex.Snapshot cached = ResourceIndex.cachedSnapshot();
+            if (cached != null) {
+                applySnapshot(cached);
+            }
+        }
+        if (!this.scanning) {
             startScan();
         }
     }
@@ -649,6 +669,7 @@ public final class ResourceManagerScreen extends Screen implements TreeView.Host
         this.textValue.visible = false;
         this.textApplyButton.visible = false;
         this.textRevertButton.visible = false;
+        this.textAddKeyButton.visible = false;
         this.inspectorInfo = new Ui.Rect(0, 0, 0, 0);
         this.previewBox = null;
     }
@@ -660,6 +681,7 @@ public final class ResourceManagerScreen extends Screen implements TreeView.Host
         this.textValue.visible = textMode;
         this.textApplyButton.visible = textMode;
         this.textRevertButton.visible = textMode;
+        this.textAddKeyButton.visible = textMode;
         if (!textMode) {
             return;
         }
@@ -672,7 +694,11 @@ public final class ResourceManagerScreen extends Screen implements TreeView.Host
         int reserved = 12 + 24 + 12 + BUTTON + 12;
         int infoHeight = Ui.clamp(Math.min(80, bottom - infoTop - reserved), 32, 80);
         this.inspectorInfo = new Ui.Rect(x, infoTop, width, infoHeight);
-        Ui.place(this.textFilter, x, this.inspectorInfo.bottom() + 3, width, 12);
+        // "Add key" sits next to the filter box: it starts editing the key typed there, which covers the
+        // keys a pack does not declare (a mod string that has no translation, for instance).
+        int addWidth = Ui.clamp(this.font.width(this.textAddKeyButton.getMessage()) + 10, 40, 72);
+        Ui.place(this.textAddKeyButton, x + width - addWidth, this.inspectorInfo.bottom() + 3, addWidth, 12);
+        Ui.place(this.textFilter, x, this.inspectorInfo.bottom() + 3, width - addWidth - 4, 12);
         int buttonsTop = bottom - BUTTON;
         int valueTop = buttonsTop - 3 - 12;
         int listTop = this.inspectorInfo.bottom() + 3 + 12 + 3;
@@ -688,6 +714,7 @@ public final class ResourceManagerScreen extends Screen implements TreeView.Host
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float delta) {
         syncConfig();
+        syncRuntime();
         layout();
         saveTuningIfIdle();
         checkPreviewSound();
@@ -750,9 +777,14 @@ public final class ResourceManagerScreen extends Screen implements TreeView.Host
         boolean expand = this.expandDisabledButton.visible;
         int reserved = (expand ? this.expandDisabledButton.getWidth() : 0)
                 + this.collapseDisabledButton.getWidth() + this.clearButton.getWidth() + 24;
-        String title = Ui.trim(this.font,
-                Component.translatable("resourcemanager.ui.panel.disabled", this.config.disabledCount()).getString(),
-                this.disabledPanelHeader.w() - reserved);
+        // While the search box filters the entries the header shows both numbers, so a short list is
+        // never mistaken for a stale count.
+        boolean filtered = this.disabledKeys.size() < this.config.disabledCount();
+        String titleText = filtered
+                ? Component.translatable("resourcemanager.ui.panel.disabledFiltered", this.disabledKeys.size(),
+                        this.config.disabledCount()).getString()
+                : Component.translatable("resourcemanager.ui.panel.disabled", this.config.disabledCount()).getString();
+        String title = Ui.trim(this.font, titleText, this.disabledPanelHeader.w() - reserved);
         Ui.header(graphics, this.font, this.disabledPanelHeader, Component.literal(title),
                 this.config.disabledCount() > 0 ? Ui.WARN : Ui.MUTED);
         graphics.fill(this.disabledPanelBody.x(), this.disabledPanelBody.y(), this.disabledPanelBody.right(),
@@ -836,6 +868,14 @@ public final class ResourceManagerScreen extends Screen implements TreeView.Host
             String value = providers.size() + " \u00b7 " + (winner == null ? "-" : winner);
             y = drawInfoLine(graphics, x, y, width, limit, Component.translatable("resourcemanager.ui.info.providers"),
                     value, Ui.MUTED);
+            // Authoritative line: the live manager is asked which pack serves the file at this moment.
+            String serving = servingPack(node);
+            y = drawInfoLine(graphics, x, y, width, limit, Component.translatable("resourcemanager.ui.info.serving"),
+                    servingLabel(node), serving == null || !serving.equals(winner) ? Ui.WARN : Ui.OK);
+        }
+        if (isServerPack(node.packId())) {
+            y = drawInfoLine(graphics, x, y, width, limit, Component.translatable("resourcemanager.ui.info.source"),
+                    Component.translatable("resourcemanager.ui.info.sourceServer").getString(), Ui.ACCENT);
         }
         y = drawInfoLine(graphics, x, y, width, limit, Component.translatable("resourcemanager.ui.info.state"),
                 stateText(node), stateColor(node));
@@ -843,9 +883,20 @@ public final class ResourceManagerScreen extends Screen implements TreeView.Host
             ensurePreview(node);
             this.preview.render(graphics, this.previewBox);
             if (this.preview.hasImage()) {
+                // Caption strip inside the frame: the strip below it carries the inspector text, and a
+                // long file name would otherwise run into the size label.
                 String size = this.preview.sourceWidth() + "x" + this.preview.sourceHeight();
-                graphics.drawString(this.font, size, this.previewBox.right() - this.font.width(size),
-                        this.previewBox.bottom() + 2, Ui.OFF, false);
+                String source = Component.translatable(this.previewFromEffective
+                        ? "resourcemanager.ui.preview.effective"
+                        : "resourcemanager.ui.preview.ownCopy").getString();
+                int captionY = this.previewBox.bottom() - 11;
+                graphics.fill(this.previewBox.x() + 1, captionY - 1, this.previewBox.right() - 1, captionY + 9,
+                        Ui.PANEL);
+                int room = this.previewBox.w() - this.font.width(size) - 10;
+                graphics.drawString(this.font, Ui.trim(this.font, source, room), this.previewBox.x() + 3, captionY,
+                        this.previewFromEffective ? Ui.OK : Ui.WARN, false);
+                graphics.drawString(this.font, size, this.previewBox.right() - 3 - this.font.width(size), captionY,
+                        Ui.OFF, false);
             }
         }
     }
@@ -1070,6 +1121,70 @@ public final class ResourceManagerScreen extends Screen implements TreeView.Host
         if (this.tree != null) {
             this.tree.refresh();
         }
+    }
+
+    /**
+     * Keeps what is displayed tied to the live resource manager. The game replaces its manager whenever
+     * resources are reloaded (F3+T, the options screen, joining or leaving a world), and the scan is only
+     * a snapshot of one manager, so a swap means a refresh — otherwise the GUI would keep reporting an
+     * index that no longer describes the game.
+     */
+    private void syncRuntime() {
+        if (this.scanning) {
+            return;
+        }
+        if (ResourceIndex.cachedSnapshot() == null || !ResourceIndex.isStale()) {
+            this.rescanAt = 0L;
+            return;
+        }
+        if (this.rescanAt == 0L) {
+            this.rescanAt = Util.getMillis() + RESCAN_DELAY_MILLIS;
+            return;
+        }
+        if (Util.getMillis() >= this.rescanAt) {
+            this.rescanAt = 0L;
+            startScan();
+        }
+    }
+
+    /**
+     * The pack the running resource manager serves this file from <em>right now</em>. This is the
+     * authoritative answer — the config only describes what the next reload will do — which is why the
+     * inspector shows it next to the pending state.
+     */
+    private String servingPack(ResourceNode node) {
+        if (node == null || node.location() == null) {
+            return null;
+        }
+        try {
+            return Minecraft.getInstance().getResourceManager().getResource(node.location())
+                    .map(resource -> ResourceManagerConfig.normalizePackId(resource.sourcePackId()))
+                    .orElse(null);
+        } catch (Exception error) {
+            return null;
+        }
+    }
+
+    /** Packs the server pushed to this client (their runtime ids start with {@code server/}). */
+    private static boolean isServerPack(String packId) {
+        return packId != null && packId.startsWith("server/");
+    }
+
+    /**
+     * The "Serving now" text: the pack the live manager uses, plus the pack the config will use once the
+     * packs are reloaded when the two differ. That difference is the whole delay the GUI can otherwise
+     * misreport, so it is spelled out instead of being hidden.
+     */
+    private String servingLabel(ResourceNode node) {
+        String serving = servingPack(node);
+        if (serving == null) {
+            return Component.translatable("resourcemanager.ui.info.servingNone").getString();
+        }
+        String winner = node == null ? null : winnerName(node);
+        if (winner != null && !winner.equals(serving)) {
+            return Component.translatable("resourcemanager.ui.info.servingPending", serving, winner).getString();
+        }
+        return serving;
     }
 
     private void applyTuning(float volume, float pitch) {
@@ -1704,6 +1819,11 @@ public final class ResourceManagerScreen extends Screen implements TreeView.Host
         return this.config.text(key) != null;
     }
 
+    @Override
+    public String textValue(String key) {
+        return LangText.effective(key);
+    }
+
     /** Refreshes the key list whenever the selection or the filter changes. */
     private void refreshLangKeys() {
         String filter = this.textFilter == null ? "" : this.textFilter.getValue().trim().toLowerCase(Locale.ROOT);
@@ -1761,6 +1881,22 @@ public final class ResourceManagerScreen extends Screen implements TreeView.Host
         this.textEditStatus = Component.translatable("resourcemanager.ui.text.reverted", this.langKey).getString();
     }
 
+    /**
+     * Starts editing the key typed into the filter box, even when no loaded {@code lang} file declares it:
+     * that is how a string that simply has no translation yet (a mod item name, say) gets one.
+     */
+    private void addTextKey() {
+        String key = this.textFilter == null ? "" : this.textFilter.getValue().trim();
+        if (key.isEmpty() || key.indexOf('.') < 0) {
+            this.textEditStatus = Component.translatable("resourcemanager.ui.text.addKeyHint").getString();
+            return;
+        }
+        selectTextKey(key);
+        this.textEditStatus = this.config.text(key) != null
+                ? Component.translatable("resourcemanager.ui.text.applied", key).getString()
+                : Component.translatable("resourcemanager.ui.text.addedKey", key).getString();
+    }
+
     /** Leaves the key filter and hands keyboard navigation to the key list. */
     private void focusTextList(boolean fromBottom) {
         if (this.textFilter != null) {
@@ -1778,7 +1914,8 @@ public final class ResourceManagerScreen extends Screen implements TreeView.Host
 
     /** Reads the pixels of the inspected file once per selection. */
     private void ensurePreview(ResourceNode node) {
-        String identity = node.packId() + "|" + node.location();
+        String identity = node.packId() + "|" + node.location() + "|" + this.config.version() + "|"
+                + System.identityHashCode(Minecraft.getInstance().getResourceManager());
         if (identity.equals(this.previewIdentity)) {
             return;
         }
@@ -1787,7 +1924,28 @@ public final class ResourceManagerScreen extends Screen implements TreeView.Host
             this.preview.clear();
             return;
         }
-        this.preview.show(resource(this.snapshot.packResources(node.packId()), node.location()));
+        // The live manager answers with the file the game is really using right now, which is what a
+        // preview is for: once pack A's copy is disabled, this shows pack B's copy.
+        IoSupplier<InputStream> supplier = liveResource(node.location());
+        this.previewFromEffective = supplier != null;
+        if (supplier == null) {
+            supplier = resource(this.snapshot.packResources(node.packId()), node.location());
+        }
+        this.preview.show(supplier);
+    }
+
+    /** The resource the running manager serves for this location, or {@code null} when nobody serves it. */
+    private static IoSupplier<InputStream> liveResource(ResourceLocation location) {
+        if (location == null) {
+            return null;
+        }
+        try {
+            return Minecraft.getInstance().getResourceManager().getResource(location)
+                    .map(resource -> (IoSupplier<InputStream>) resource::open)
+                    .orElse(null);
+        } catch (Exception error) {
+            return null;
+        }
     }
 
     private static boolean isImageFile(String path) {
@@ -1869,6 +2027,28 @@ public final class ResourceManagerScreen extends Screen implements TreeView.Host
         return this.disabledFullscreen;
     }
 
+    /** Pack the live resource manager serves the selected file from; empty when nothing serves it. */
+    public String servingPackId() {
+        String serving = this.selected == null ? null : servingPack(this.selected);
+        return serving == null ? "" : serving;
+    }
+
+    /** Pack the config would let win the selected file once the packs are reloaded. */
+    public String winnerPackId() {
+        String winner = this.selected == null ? null : winnerName(this.selected);
+        return winner == null ? "" : winner;
+    }
+
+    /** The inspector's "Serving now" line for the current selection. */
+    public String servingText() {
+        return this.selected == null || !this.selected.isFile() ? "" : servingLabel(this.selected);
+    }
+
+    /** True when the thumbnail shows the pixels the live manager serves (not a shadowed copy). */
+    public boolean previewFromEffective() {
+        return this.previewFromEffective;
+    }
+
     public String statusMessage() {
         return this.statusMessage;
     }
@@ -1897,5 +2077,30 @@ public final class ResourceManagerScreen extends Screen implements TreeView.Host
 
     public boolean textEditorVisible() {
         return this.textFilter != null && this.textFilter.visible && this.textApplyButton.visible;
+    }
+
+    /** Keys the key list currently shows: the file's keys, narrowed by the key-or-text filter. */
+    public List<String> visibleTranslationKeys() {
+        return this.langKeysFiltered;
+    }
+
+    /** The value the selected {@code lang} file declares for a key, without the GUI override. */
+    public String fileTranslationValue(String key) {
+        return currentLangValues().get(key);
+    }
+
+    public String textEditStatus() {
+        return this.textEditStatus;
+    }
+
+    /** Fills the key filter box the way typing into it does, for the self check. */
+    public void setTextFilter(String value) {
+        if (this.textFilter != null) {
+            this.textFilter.setValue(value);
+        }
+    }
+
+    public String textFilterValue() {
+        return this.textFilter == null ? "" : this.textFilter.getValue();
     }
 }

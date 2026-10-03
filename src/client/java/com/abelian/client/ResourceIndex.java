@@ -49,6 +49,35 @@ public final class ResourceIndex {
     private ResourceIndex() {
     }
 
+    /**
+     * The most recent scan, kept so that reopening the GUI paints immediately instead of showing an
+     * empty tree while the (asynchronous) refresh runs.
+     */
+    private static volatile Snapshot cached;
+    /** The resource manager the cached scan was taken from; identity is how the game reports a reload. */
+    private static volatile ResourceManager cachedManager;
+
+    /**
+     * True when the cached scan no longer describes the live resource manager — for instance after the
+     * game reloaded resources on its own (F3+T, a pack ticked in the options screen) or after the world
+     * changed. The GUI uses this to refresh itself instead of showing stale information.
+     */
+    public static boolean isStale() {
+        Snapshot snapshot = cached;
+        return snapshot == null || cachedManager != Minecraft.getInstance().getResourceManager();
+    }
+
+    /** Last completed scan, or {@code null} when nothing has been scanned yet. */
+    public static Snapshot cachedSnapshot() {
+        return cached;
+    }
+
+    /** Drops the cache; used when the runtime manager stops being usable (e.g. leaving a world). */
+    public static void invalidate() {
+        cached = null;
+        cachedManager = null;
+    }
+
     public static CompletableFuture<Snapshot> scanAsync() {
         return CompletableFuture.supplyAsync(ResourceIndex::scan);
     }
@@ -80,47 +109,37 @@ public final class ResourceIndex {
         Catalogue catalogue = readCatalogue(client);
         Set<String> roots = new LinkedHashSet<>(ASSET_ROOTS);
         roots.addAll(catalogue.roots());
-        for (String root : roots) {
-            try {
-                Map<ResourceLocation, List<Resource>> stacks = manager.listResourceStacks(root, location -> true);
-                stacks.forEach((location, stack) -> {
-                    List<String> ids = locations.computeIfAbsent(location, key -> new ArrayList<>());
-                    for (Resource resource : stack) {
-                        String packId = ResourceManagerConfig.normalizePackId(resource.source().packId());
-                        if (packNodes.containsKey(packId) && !ids.contains(packId)) {
-                            ids.add(packId);
-                        }
-                    }
-                });
-            } catch (Exception error) {
-                com.abelian.ResourceManager.LOGGER.warn("Could not list resources under '{}'", root, error);
-            }
-        }
-        for (ResourceLocation location : catalogue.rootFiles()) {
-            try {
-                List<Resource> stack = manager.getResourceStack(location);
-                if (stack.isEmpty()) {
-                    continue;
-                }
-                List<String> ids = locations.computeIfAbsent(location, key -> new ArrayList<>());
-                for (Resource resource : stack) {
-                    String packId = ResourceManagerConfig.normalizePackId(resource.source().packId());
-                    if (packNodes.containsKey(packId) && !ids.contains(packId)) {
-                        ids.add(packId);
-                    }
-                }
-            } catch (Exception error) {
-                com.abelian.ResourceManager.LOGGER.warn("Could not resolve {}", location, error);
-            }
-        }
+        // The packs are listed directly instead of asking the resource manager for stacks. The manager
+        // only ever hands out the filtered view, so a file this GUI disabled would drop out of the tree
+        // as soon as the packs are reloaded — exactly the entries the GUI must keep showing so they can
+        // be inspected and enabled again. Scanning the packs themselves also keeps pack order (lowest
+        // priority first), which providersOf() relies on when it walks up to the winning pack.
         for (Map.Entry<String, PackResources> entry : packSources.entrySet()) {
-            for (String namespace : safeNamespaces(entry.getValue())) {
-                ResourceLocation sounds = ResourceLocation.fromNamespaceAndPath(namespace, "sounds.json");
-                if (hasResource(entry.getValue(), sounds)) {
-                    List<String> ids = locations.computeIfAbsent(sounds, key -> new ArrayList<>());
-                    if (!ids.contains(entry.getKey())) {
-                        ids.add(entry.getKey());
+            String packId = entry.getKey();
+            PackResources pack = entry.getValue();
+            Set<String> namespaces = safeNamespaces(pack);
+            for (String root : roots) {
+                for (String namespace : namespaces) {
+                    try {
+                        pack.listResources(PackType.CLIENT_RESOURCES, namespace, root, (location, supplier) -> {
+                            if (!location.getPath().isEmpty()) {
+                                addProvider(locations, location, packId);
+                            }
+                        });
+                    } catch (Exception error) {
+                        com.abelian.ResourceManager.LOGGER.warn("Could not list {} of pack {}", root, packId, error);
                     }
+                }
+            }
+            for (ResourceLocation location : catalogue.rootFiles()) {
+                if (hasResource(pack, location)) {
+                    addProvider(locations, location, packId);
+                }
+            }
+            for (String namespace : namespaces) {
+                ResourceLocation sounds = ResourceLocation.fromNamespaceAndPath(namespace, "sounds.json");
+                if (hasResource(pack, sounds)) {
+                    addProvider(locations, sounds, packId);
                 }
             }
         }
@@ -169,7 +188,10 @@ public final class ResourceIndex {
         com.abelian.ResourceManager.LOGGER.info(
                 "Indexed {} packs, {} resources ({}+{} roots) and {} sound events from the live resource manager",
                 packNodes.size(), providers.size(), roots.size(), catalogue.rootFiles().size(), soundEventCount);
-        return new Snapshot(infos, packNodes, packSources, providers, fileCount, soundEventCount);
+        Snapshot snapshot = new Snapshot(infos, packNodes, packSources, providers, fileCount, soundEventCount);
+        cached = snapshot;
+        cachedManager = manager;
+        return snapshot;
     }
 
     private static boolean hasResource(PackResources pack, ResourceLocation location) {
@@ -177,6 +199,15 @@ public final class ResourceIndex {
             return pack.getResource(PackType.CLIENT_RESOURCES, location) != null;
         } catch (Exception error) {
             return false;
+        }
+    }
+
+    /** Records one more pack providing a location, keeping the lowest to highest priority pack order. */
+    private static void addProvider(Map<ResourceLocation, List<String>> locations, ResourceLocation location,
+            String packId) {
+        List<String> ids = locations.computeIfAbsent(location, key -> new ArrayList<>());
+        if (!ids.contains(packId)) {
+            ids.add(packId);
         }
     }
 

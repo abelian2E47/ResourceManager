@@ -16,6 +16,9 @@ public class TextKeyList extends ScrollList {
 
         /** True when the key carries a value edited in the GUI. */
         boolean textOverridden(String key);
+
+        /** The text the game shows for this key right now, which is what the user searches for. */
+        String textValue(String key);
     }
 
     private final Host host;
@@ -61,8 +64,19 @@ public class TextKeyList extends ScrollList {
         boolean overridden = this.host.textOverridden(key);
         String badge = overridden ? "\u270e" : null;
         int badgeWidth = badge == null ? 0 : font().width(badge) + 4;
-        String name = Ui.trim(font(), key, rect.w() - badgeWidth - 7);
+        // The value column is the text the game shows for the key, so "Diamond Sword" leads to
+        // item.minecraft.diamond_sword without having to know the key. It takes at most half the row.
+        String value = this.host.textValue(key);
+        int valueWidth = value == null || value.isEmpty() ? 0
+                : Math.min(font().width(value), Math.max(24, (rect.w() - badgeWidth) / 2));
+        String shownValue = valueWidth == 0 ? "" : Ui.trim(font(), value, valueWidth);
+        int shownWidth = shownValue.isEmpty() ? 0 : font().width(shownValue);
+        String name = Ui.trim(font(), key, rect.w() - badgeWidth - 7 - (shownWidth == 0 ? 0 : shownWidth + 6));
         graphics.drawString(font(), name, rect.x() + 3, textY, overridden ? Ui.ACCENT : Ui.MUTED, false);
+        if (shownWidth > 0) {
+            graphics.drawString(font(), shownValue, rect.right() - badgeWidth - 4 - shownWidth, textY, Ui.OFF,
+                    false);
+        }
         if (badge != null) {
             graphics.drawString(font(), badge, rect.right() - badgeWidth - 2, textY, Ui.ACCENT, false);
         }

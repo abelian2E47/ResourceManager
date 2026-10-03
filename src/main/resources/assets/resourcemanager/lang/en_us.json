@@ -13,6 +13,7 @@
 
   "resourcemanager.ui.panel.filters": "FILTERS",
   "resourcemanager.ui.panel.disabled": "DISABLED (%s)",
+  "resourcemanager.ui.panel.disabledFiltered": "DISABLED (%s/%s)",
   "resourcemanager.ui.panel.tree": "RESOURCE TREE",
   "resourcemanager.ui.panel.inspector": "INSPECTOR",
   "resourcemanager.ui.panel.inspector.text": "TEXT EDITOR",
@@ -42,7 +43,7 @@
   "resourcemanager.ui.status.loaded": "%s files · %s packs · %s sound events",
   "resourcemanager.ui.status.disabledCount": "%s disabled",
   "resourcemanager.ui.status.textCount": "%s text edits",
-  "resourcemanager.ui.status.pending": "%s unsaved changes — click \"Reload packs\" to apply",
+  "resourcemanager.ui.status.pending": "%s changes not applied yet — click \"Reload packs\"",
   "resourcemanager.ui.status.restored": "Restored %s",
   "resourcemanager.ui.status.langFile": "%s translation keys — pick one to edit",
   "resourcemanager.ui.hints": "Enter toggle · arrows navigate · double-click expands",
@@ -67,6 +68,9 @@
   "resourcemanager.ui.text.applied": "Applied %s",
   "resourcemanager.ui.text.reverted": "Reverted %s",
   "resourcemanager.ui.text.noKey": "Select a key first",
+  "resourcemanager.ui.text.addKey": "Add key",
+  "resourcemanager.ui.text.addKeyHint": "Type a key such as item.minecraft.diamond_sword into the filter box first",
+  "resourcemanager.ui.text.addedKey": "Editing %s, which no loaded file declares",
 
   "resourcemanager.ui.preview.unknown": "Event %s is not provided by the loaded sounds.json (a higher pack may override it)",
   "resourcemanager.ui.preview.empty": "Event %s has no usable sound file",
@@ -75,6 +79,8 @@
   "resourcemanager.ui.preview.starting": "Starting preview: %s",
   "resourcemanager.ui.preview.playing": "Playing %s",
   "resourcemanager.ui.preview.silent": "Preview did not start: %s (volume 0 or no audio device)",
+  "resourcemanager.ui.preview.effective": "in use now",
+  "resourcemanager.ui.preview.ownCopy": "this pack's copy (not served)",
 
   "resourcemanager.ui.info.pack": "Pack",
   "resourcemanager.ui.info.type": "Type",
@@ -86,6 +92,11 @@
   "resourcemanager.ui.info.fileValue": "In file",
   "resourcemanager.ui.info.effectiveValue": "In game",
   "resourcemanager.ui.info.providers": "Providers",
+  "resourcemanager.ui.info.serving": "Effective source",
+  "resourcemanager.ui.info.servingPending": "%s — after reload: %s",
+  "resourcemanager.ui.info.servingNone": "nothing serves it right now",
+  "resourcemanager.ui.info.source": "Source",
+  "resourcemanager.ui.info.sourceServer": "pushed by the server",
   "resourcemanager.ui.info.state": "State",
 
   "resourcemanager.ui.type.pack": "pack",
