@@ -1,6 +1,6 @@
 # ResourceManager
 
-**在游戏内直接调试资源包的 Fabric 客户端模组（Minecraft 1.21.4）。**
+**在游戏内直接调试资源包的 Fabric 客户端模组（Minecraft 1.21.8）。**
 
 按 **F8** 打开 GUI：像文件管理器一样浏览所有已启用的资源包，把某个包里不想要的贴图 / 模型 / 声音 /
 UI 贴图直接禁用掉 —— 这个包就不再提供那个文件，加载顺序中它下面的包接管；也可以直接调 `sounds.json`
@@ -48,7 +48,7 @@ UI 贴图直接禁用掉 —— 这个包就不再提供那个文件，加载顺
 
 | | |
 | --- | --- |
-| Minecraft | 1.21.4 |
+| Minecraft | 1.21.8 |
 | Fabric Loader | 0.16.14 或更高 |
 | Fabric API | 必需 |
 | Java | 21 |
@@ -240,7 +240,7 @@ UI 贴图直接禁用掉 —— 这个包就不再提供那个文件，加载顺
 $env:RESOURCEMANAGER_VERIFY = "1"; .\gradlew.bat runClient     # 跑完会自动退出客户端
 ```
 
-最近一次运行：43 项断言全部 PASS，15 张截图，用时约 1 分钟。报告里会逐行列出 `PASS` / `FAIL` / `SKIP`，例如：
+最近一次运行：32 项断言 PASS、4 项 SKIP（外部素材包在此版本不加载）、13 张截图，用时约 1 分钟。报告里会逐行列出 `PASS` / `FAIL` / `SKIP`，例如：
 
 ```
 PASS: a disabled file is no longer served by that pack (file/Squareful ….zip -> vanilla)
