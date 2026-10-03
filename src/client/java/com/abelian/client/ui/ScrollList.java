@@ -160,7 +160,7 @@ public abstract class ScrollList extends AbstractWidget implements DragTarget {
         if (button != 0 || !this.active || !this.visible || !isMouseOver(mouseX, mouseY)) {
             return false;
         }
-        playButtonClickSound(Minecraft.getInstance().getSoundManager());
+        playDownSound(Minecraft.getInstance().getSoundManager());
         if (scrollbarVisible() && mouseX >= scrollbarLeft()) {
             this.draggingThumb = true;
             setScrollFromMouse(mouseY);

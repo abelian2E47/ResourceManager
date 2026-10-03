@@ -106,7 +106,7 @@ public final class PreviewTexture {
         }
         int x = box.x() + (box.w() - drawWidth) / 2;
         int y = box.y() + (box.h() - drawHeight) / 2;
-        graphics.blit(RenderType::guiTextured, ID, x, y, 0.0F, 0.0F, drawWidth, drawHeight,
+        graphics.blit(ID, x, y, 0.0F, 0.0F, drawWidth, drawHeight,
                 this.sourceWidth, this.sourceHeight);
     }
 

@@ -1,0 +1,9 @@
+Reusing configuration cache.
+> Task :processResources UP-TO-DATE
+> Task :compileJava UP-TO-DATE
+> Task :classes UP-TO-DATE
+> Task :compileClientJava
+
+BUILD SUCCESSFUL in 1s
+3 actionable tasks: 1 executed, 2 up-to-date
+Configuration cache entry reused.

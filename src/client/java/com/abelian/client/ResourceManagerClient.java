@@ -38,6 +38,11 @@ public class ResourceManagerClient implements ClientModInitializer {
         });
     }
 
+    /** The key binding this mod registers; 1.21.1 has no {@code KeyMapping.get(String)} lookup. */
+    public static KeyMapping openKeyMapping() {
+        return openKey;
+    }
+
     private static boolean isKeyDown(Minecraft client) {
         InputConstants.Key key = openKey.getDefaultKey();
         InputConstants.Type type = key.getType();

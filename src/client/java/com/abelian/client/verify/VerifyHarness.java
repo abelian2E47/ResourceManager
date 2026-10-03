@@ -280,7 +280,7 @@ public final class VerifyHarness implements ClientModInitializer {
     }
 
     private void stepOpen(Minecraft client) {
-        net.minecraft.client.KeyMapping mapping = net.minecraft.client.KeyMapping.get("key.resourcemanager.open");
+        net.minecraft.client.KeyMapping mapping = com.abelian.client.ResourceManagerClient.openKeyMapping();
         note("screen before the shortcut = " + name(client.screen));
         if (mapping == null) {
             note("key binding 'key.resourcemanager.open' is not registered");

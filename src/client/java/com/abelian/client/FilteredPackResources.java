@@ -11,7 +11,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.PackLocationInfo;
 import net.minecraft.server.packs.PackResources;
 import net.minecraft.server.packs.PackType;
-import net.minecraft.server.packs.metadata.MetadataSectionType;
+import net.minecraft.server.packs.metadata.MetadataSectionSerializer;
 import net.minecraft.server.packs.resources.IoSupplier;
 
 /**
@@ -67,8 +67,8 @@ public final class FilteredPackResources implements PackResources {
     }
 
     @Override
-    public <T> T getMetadataSection(MetadataSectionType<T> type) throws IOException {
-        return delegate.getMetadataSection(type);
+    public <T> T getMetadataSection(MetadataSectionSerializer<T> serializer) throws IOException {
+        return delegate.getMetadataSection(serializer);
     }
 
     @Override
