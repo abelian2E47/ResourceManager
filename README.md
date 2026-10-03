@@ -48,25 +48,6 @@ edit `lang` keys so the new text appears in game at once.
 
 ## Using it
 
-```
-┌ toolbar   title · search · sidebar · reload packs · close ────────────────┐
-├──────────────┬──────────────────────────────┬────────────────────────────┤
-│ FILTERS      │ RESOURCE TREE                │ INSPECTOR                  │
-│  All         │  ▾ pack                #2 off│  name                      │
-│  Textures    │    ▾ namespace       554  off│  namespace:path            │
-│  Sounds      │      ▾ directory             │  pack / type / state       │
-│  UI          │        • file         ♪ event│  ┌────────┐ texture preview│
-│  Models      │                              │  │ 16x16  │ 16x16          │
-│  Text        │                              │  └────────┘                │
-│  Other       │                              │  providers (load order)    │
-│ DISABLED (3) │                              │  volume ▬▬▬▬▬ 1.00         │
-│  list  [Full]│                              │  pitch  ▬▬▬▬▬ 1.00         │
-│ [Clear all]  │                              │  [Reset]      [Play]       │
-├──────────────┴──────────────────────────────┴────────────────────────────┤
-│ status  25142 files · 58 packs · 1669 sound events · 3 disabled │ hints   │
-└──────────────────────────────────────────────────────────────────────────┘
-```
-
 Press **F8** anywhere — title screen, pause screen, in a world. The key is rebindable in
 *Options → Controls → Resource Manager*.
 
