@@ -12,14 +12,15 @@ import org.lwjgl.glfw.GLFW;
  * Horizontal value slider with a label on the left and the numeric value on the right. Dragging works
  * through {@link DragTarget} so the owning screen stays in control of the mouse capture.
  *
- * <p>Sliders cover ranges as different as a 0..1 volume and a 0..8 semitone shift, so the step is
- * derived from the range unless the caller sets one, and the label gives way to the value when the
+ * <p>Sliders cover ranges as different as a 0..16 volume multiplier and a 0.5..2 pitch, so the step
+ * is derived from the range unless the caller sets one, and the label gives way to the value when the
  * control is too narrow to hold both. {@link #setSnap(double)} quantises the value itself, which is
- * what semitone snapping needs, while {@link #setCenter(double)} only draws a tick so a neutral point
- * such as pitch 1.0 stays visible.
+ * what semitone snapping needs, {@link #setCurve(double)} spends most of the travel on the low end of
+ * a wide range, and {@link #setCenter(double)} only draws a tick so a neutral point such as pitch 1.0
+ * stays visible.
  *
  * <pre>{@code
- * UiSlider pitch = new UiSlider(font, 0, 0, 120, UiMetrics.SLIDER_H, "Pitch", 0.0, 2.0, "%.2f",
+ * UiSlider pitch = new UiSlider(font, 0, 0, 120, UiMetrics.SLIDER_H, "Pitch", 0.5, 2.0, "%.2f",
  *         this.holder::getPitch, this.holder::setPitch).setSnap(0.05).setCenter(1.0);
  * }</pre>
  */
@@ -50,6 +51,7 @@ public class UiSlider extends AbstractWidget implements DragTarget {
     private double current;
     private double step;
     private double snap;
+    private double curve = 1.0;
     private boolean hasCenter;
     private double center;
 
@@ -77,6 +79,16 @@ public class UiSlider extends AbstractWidget implements DragTarget {
     /** When positive, every change snaps to a multiple of {@code snap} (for example 1.0 for semitones). */
     public UiSlider setSnap(double snap) {
         this.snap = snap > 0.0 && !Double.isNaN(snap) ? snap : 0.0;
+        return this;
+    }
+
+    /**
+     * Bends the track so most of its travel covers the low end of a wide range, which is where a
+     * volume multiplier is judged: 3 puts 1.0 about 40% of the way along a 0..16 slider. Values below
+     * 1 keep the linear mapping.
+     */
+    public UiSlider setCurve(double exponent) {
+        this.curve = exponent >= 1.0 && !Double.isNaN(exponent) ? exponent : 1.0;
         return this;
     }
 
@@ -215,20 +227,29 @@ public class UiSlider extends AbstractWidget implements DragTarget {
     }
 
     private int handleCenter(int trackX, int trackW) {
-        double ratio = (this.current - this.min) / (this.max - this.min);
-        return trackX + (int) Math.round(Ui.clamp(ratio, 0.0, 1.0) * (trackW - 1));
+        return trackX + (int) Math.round(ratio(this.current) * (trackW - 1));
     }
 
     private int tickX(int trackX, int trackW) {
-        double ratio = (this.center - this.min) / (this.max - this.min);
-        return trackX + (int) Math.round(Ui.clamp(ratio, 0.0, 1.0) * (trackW - 1));
+        return trackX + (int) Math.round(ratio(this.center) * (trackW - 1));
+    }
+
+    /** Where {@code value} sits on the track, from 0 to 1, following {@link #setCurve(double)}. */
+    private double ratio(double value) {
+        double normal = (clampValue(value) - this.min) / (this.max - this.min);
+        return Ui.clamp(this.curve == 1.0 ? normal : Math.pow(normal, 1.0 / this.curve), 0.0, 1.0);
+    }
+
+    /** The value at track position {@code ratio}, the inverse of {@link #ratio(double)}. */
+    private double valueAt(double ratio) {
+        double normal = this.curve == 1.0 ? ratio : Math.pow(Ui.clamp(ratio, 0.0, 1.0), this.curve);
+        return this.min + normal * (this.max - this.min);
     }
 
     private void setFromMouse(double mouseX) {
         int trackX = trackLeft();
         int trackW = Math.max(1, trackWidth());
-        double ratio = Ui.clamp((mouseX - trackX) / (double) (trackW - 1), 0.0, 1.0);
-        apply(this.min + ratio * (this.max - this.min));
+        apply(valueAt((mouseX - trackX) / (double) (trackW - 1)));
     }
 
     @Override

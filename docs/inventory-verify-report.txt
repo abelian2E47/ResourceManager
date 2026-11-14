@@ -20,9 +20,16 @@ PASS: Name edit leaves appearance layer independent
 PASS: Sound list shows events without JSON contents or duplicate OGG rows
 PASS: Sound detail offers volume and pitch sliders: 2
 PASS: Sound volume changes through real input
+PASS: Volume slider reaches the loudest multiplier: 16.0
 PASS: Sound pitch changes through real input
-PASS: Game playback multiplies volume by 5.441176 (1.0 -> 5.441176)
-PASS: Game playback multiplies pitch by 2.838968 (1.0 -> 2.838968)
+PASS: Pitch slider starts at the lowest pitch the game plays: 0.5
+PASS: Pitch slider stops at the highest pitch the game plays: 2.0
+PASS: Pitch outside 0.5-2 is clamped to what the game plays
+PASS: Game playback multiplies volume by 1.78281 (1.0 -> 1.78281)
+PASS: Game playback multiplies pitch by 1.231317 (1.0 -> 1.231317)
+PASS: Mute button writes volume 0
+PASS: Muted event reaches the game at volume 0
+PASS: Unmute restores the level before muting: 1.78281
 PASS: Sound tuning survives a config round trip
 PASS: Audio-only pack is available without a sound definition
 PASS: Reload preserves the selected non-first sound event

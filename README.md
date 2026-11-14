@@ -21,10 +21,11 @@ text change immediately; **Reset name** puts the original back. Only that object
 overridden — no language file is edited.
 
 **Sound.** The events that belong to the object. Choose a pack layer, **Play** to hear exactly the bytes
-that layer ships, **Stop** to release the player, and set volume (0–8) and pitch (0.25–4), which are
-multiplied into real in-game playback. Vanilla then clamps what it plays — pitch to 0.5–2, total volume
-to 1 — so settings past those limits only lift events a pack already registered quieter or off-pitch.
-Each event keeps its own layer, independently of the visual layer and of the other events.
+that layer ships, **Stop** to release the player, **Mute** to silence the event in the game and in the
+preview, and set volume (0–16) and pitch (0.5–2), which are multiplied into real in-game playback. The
+pitch range is exactly the one vanilla lets through; volume is a multiplier applied before vanilla clamps
+the total to 1, so its top end lifts events a pack registered quieter than full volume. Each event keeps
+its own layer, independently of the visual layer and of the other events.
 
 ## Pack layers
 

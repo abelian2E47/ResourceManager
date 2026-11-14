@@ -4,6 +4,7 @@ import com.abelian.client.*;
 import com.abelian.client.catalog.*;
 import com.abelian.client.catalog.SubjectCatalog.*;
 import com.abelian.client.search.BilingualSearch;
+import com.abelian.client.sound.SoundTuning;
 import com.abelian.client.ui.*;
 
 import net.minecraft.client.gui.GuiGraphics;
@@ -38,9 +39,11 @@ public final class InventoryPage {
     private final List<UiButton> kinds = new ArrayList<>(), modes = new ArrayList<>();
     private final List<net.minecraft.client.gui.components.AbstractWidget> controls =
             new ArrayList<>();
-    private UiButton back, apply, play, stop, saveName, resetName, editFile, layerMode;
+    private UiButton back, apply, play, stop, mute, saveName, resetName, editFile, layerMode;
     private UiField name;
     private UiSlider volume, pitch;
+    /** Last unmuted volume per event, so unmuting returns to the level the player chose. */
+    private final Map<String, Float> lastVolume = new HashMap<>();
     private LayerList layers;
     private AssetList list;
     private boolean compactLayers;
@@ -91,6 +94,8 @@ public final class InventoryPage {
         apply.setTooltip(tr("appearance.hint"));
         play = button("resourcemanager.ui.action.play", this::play);
         stop = button("resourcemanager.inventory.stop", PackSoundPreview::stop);
+        mute = button("resourcemanager.inventory.mute", this::toggleMute);
+        mute.setTooltip(tr("audio.muteHint"));
         editFile =
                 button(
                         "resourcemanager.inventory.editFile",
@@ -117,8 +122,11 @@ public final class InventoryPage {
                             host.setTextOverride(subject.translationKey(), "");
                             name.setValue(subject.name());
                         });
-        volume = slider("volume", 0, 8, false);
-        pitch = slider("pitch", 0.25, 4, true);
+        volume =
+                slider("volume", 0, SoundTuning.MAX_VOLUME, false)
+                        .step(0.05)
+                        .setCurve(3);
+        pitch = slider("pitch", SoundTuning.MIN_PITCH, SoundTuning.MAX_PITCH, true);
     }
 
     private UiSlider slider(String label, double min, double max, boolean isPitch) {
@@ -153,6 +161,34 @@ public final class InventoryPage {
                                 .setCenter(1));
         controls.add(slider);
         return slider;
+    }
+
+    /**
+     * Silences the event through the same volume multiplier the game reads, and puts the level back on
+     * the next click.
+     */
+    private void toggleMute() {
+        String event = event();
+        if (event.isEmpty()) return;
+        SoundTuning tuning = host.soundTuning(event);
+        if (tuning.isMuted()) {
+            host.applySoundTuning(event, tuning.withVolume(lastVolume.getOrDefault(event, 1f)));
+        } else {
+            lastVolume.put(event, tuning.volume());
+            host.applySoundTuning(event, tuning.withVolume(0));
+            PackSoundPreview.stop();
+        }
+        syncMuteButton();
+    }
+
+    private void syncMuteButton() {
+        boolean muted = !event().isEmpty() && host.soundTuning(event()).isMuted();
+        mute.setToggled(muted);
+        mute.setMessage(
+                Component.translatable(
+                        muted
+                                ? "resourcemanager.inventory.unmute"
+                                : "resourcemanager.inventory.mute"));
     }
 
     private void refresh() {
@@ -466,8 +502,11 @@ public final class InventoryPage {
                 host.showWidget(resetName, ix + (iw + 3) / 2, cy + 21, (iw - 3) / 2, 18);
                 cy += 43;
             } else if (mode == 2) {
-                host.showWidget(play, ix, cy, (iw - 3) / 2, 18);
-                host.showWidget(stop, ix + (iw + 3) / 2, cy, (iw - 3) / 2, 18);
+                int third = (iw - 6) / 3;
+                syncMuteButton();
+                host.showWidget(play, ix, cy, third, 18);
+                host.showWidget(stop, ix + third + 3, cy, third, 18);
+                host.showWidget(mute, ix + 2 * (third + 3), cy, third, 18);
                 host.showWidget(volume, ix, cy + 22, iw, 16);
                 host.showWidget(pitch, ix, cy + 41, iw, 16);
                 cy += 61;

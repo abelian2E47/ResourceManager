@@ -276,21 +276,36 @@ public final class InventoryVerify {
                     check(
                             sliders.size() == 2,
                             "Sound detail offers volume and pitch sliders: " + sliders.size());
-                    click(
-                            gui,
-                            sliders.get(0).getX() + sliders.get(0).getWidth() * 2 / 3,
-                            sliders.get(0).getY() + 6);
+                    var volumeSlider = sliders.get(0);
+                    var pitchSlider = sliders.get(1);
+                    clickVolume(gui, volumeSlider, volumeSlider.getWidth() / 2);
                     check(
                             gui.soundTuning(tuned).volume() != 1,
                             "Sound volume changes through real input");
-                    click(
-                            gui,
-                            sliders.get(1).getX() + sliders.get(1).getWidth() * 2 / 3,
-                            sliders.get(1).getY() + 6);
+                    clickVolume(gui, volumeSlider, volumeSlider.getWidth() - 2);
+                    check(
+                            near(gui.soundTuning(tuned).volume(), SoundTuning.MAX_VOLUME),
+                            "Volume slider reaches the loudest multiplier: "
+                                    + gui.soundTuning(tuned).volume());
+                    clickPitch(gui, pitchSlider, pitchSlider.getWidth() / 2);
                     check(
                             gui.soundTuning(tuned).pitch() != 1,
                             "Sound pitch changes through real input");
+                    clickPitch(gui, pitchSlider, 2);
+                    check(
+                            near(gui.soundTuning(tuned).pitch(), SoundTuning.MIN_PITCH),
+                            "Pitch slider starts at the lowest pitch the game plays: "
+                                    + gui.soundTuning(tuned).pitch());
+                    clickPitch(gui, pitchSlider, pitchSlider.getWidth() - 2);
+                    check(
+                            near(gui.soundTuning(tuned).pitch(), SoundTuning.MAX_PITCH),
+                            "Pitch slider stops at the highest pitch the game plays: "
+                                    + gui.soundTuning(tuned).pitch());
+                    checkTuningClamps();
+                    clickVolume(gui, volumeSlider, volumeSlider.getWidth() / 2);
+                    clickPitch(gui, pitchSlider, pitchSlider.getWidth() / 2);
                     checkTuningReachesPlayback(client, gui, tuned);
+                    checkMute(client, gui, tuned);
                     checkTuningRoundTrip(gui, tuned);
                     page.selectAsset(
                             page.visibleAssets().stream()
@@ -584,9 +599,9 @@ public final class InventoryVerify {
 
     /**
      * Proves the tuning reaches real playback. The engine multiplies what it reads from
-     * {@code getVolume()}/{@code getPitch()} into the channel, so the mixin has to show up there. Two
-     * instances of the same event sampled from the same seed cancel the event's own random volume and
-     * pitch and leave only the multiplier.
+     * {@code getVolume()}/{@code getPitch()} into the channel, so the mixin has to show up there.
+     * Two instances of the same event sampled from the same seed cancel the event's own random volume
+     * and pitch and leave only the multiplier.
      */
     private void checkTuningReachesPlayback(
             Minecraft client, ResourceManagerScreen gui, String event) {
@@ -633,6 +648,36 @@ public final class InventoryVerify {
                         false);
         instance.resolve(client.getSoundManager());
         return new float[] {instance.getVolume(), instance.getPitch()};
+    }
+
+    private void clickVolume(ResourceManagerScreen gui, UiSlider slider, int offset) {
+        click(gui, slider.getX() + offset, slider.getY() + 6);
+    }
+
+    private void clickPitch(ResourceManagerScreen gui, UiSlider slider, int offset) {
+        click(gui, slider.getX() + offset, slider.getY() + 6);
+    }
+
+    /** Nothing outside the audible pitch range can be stored, whatever an older config holds. */
+    private void checkTuningClamps() {
+        check(
+                near(new SoundTuning(1, 9).pitch(), SoundTuning.MAX_PITCH)
+                        && near(new SoundTuning(1, 0.1f).pitch(), SoundTuning.MIN_PITCH),
+                "Pitch outside 0.5-2 is clamped to what the game plays");
+    }
+
+    /** The mute button writes volume 0, the multiplier the game reads, so playback goes silent. */
+    private void checkMute(Minecraft client, ResourceManagerScreen gui, String event) {
+        float level = gui.soundTuning(event).volume();
+        click(gui, button(gui, "resourcemanager.inventory.mute"));
+        check(gui.soundTuning(event).isMuted(), "Mute button writes volume 0");
+        check(
+                playbackVolumeAndPitch(client, event)[0] == 0,
+                "Muted event reaches the game at volume 0");
+        click(gui, button(gui, "resourcemanager.inventory.unmute"));
+        check(
+                near(gui.soundTuning(event).volume(), level),
+                "Unmute restores the level before muting: " + level);
     }
 
     private void checkTuningRoundTrip(ResourceManagerScreen gui, String event) {
