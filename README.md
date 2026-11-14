@@ -1,106 +1,100 @@
 # ResourceManager
 
-**An in-game resource pack debugger for Minecraft 1.21.4 (Fabric).**
+**A client-side resource editor for Minecraft 1.21.4 (Fabric), laid out like a vanilla inventory.**
 
-Press **F8** to browse every enabled pack as a file-manager style tree and switch off a single texture,
-model, sound or UI sprite: that pack stops providing the one file and the next pack in the load order
-takes over. You can also tune any `sounds.json` event, preview the texture you are about to touch, and
-edit `lang` keys so the new text appears in game at once.
+Press **F8**, search for an item, block or creature by name or ID, and click its slot. Its textures, its
+display name and its sounds are one click away. Every choice is previewed before it is applied, and the
+resource packs you downloaded are never rewritten.
 
-[中文说明](README.zh_cn.md) · [Report an issue](https://github.com/abelian2E47/ResourceManager/issues)
+![The inventory: search across the top, vanilla-style slots below, status along the bottom](docs/inventory-grid.png)
 
-![The GUI: filters and disabled list on the left, the resource tree in the middle, the inspector on the right](docs/screenshot-overview.png)
+## Three tasks per object
 
-## Features
+**Visuals.** The real textures of the object, decoded from the pack you pick: every face of a block, the
+layers of a piece of equipment, the sprite of a plain item. A model, item definition, block state or
+animation metadata still travels with the texture, but those files stay off the list. One pack is chosen
+for the object's whole appearance, and parts that pack does not ship fall back to bundled assets instead
+of to another directory or ZIP pack.
 
-- **File manager layout** — toolbar, sidebar, tree, inspector and status bar are separate panels; when
-  the window gets narrow the sidebar folds itself away instead of overlapping anything.
-- **Hierarchical tree** — pack → namespace → directory → file, with a file count per node, the number
-  of disabled files (`off`) and `♪` markers for `sounds.json` events.
-- **Search and categories** — filter by pack, namespace, path or file name (matching branches expand
-  themselves, the header shows `hits / total`), or narrow the tree down to
-  Textures / Sounds / UI / Models / Text / Other.
-- **Disable exactly one resource** — the pack stops serving that file and the pack below it takes over.
-  The inspector shows what is active, what is shadowed, and which other packs ship the same file.
-  Whole packs, namespaces and directories can be disabled in one click, with a confirmation.
-- **Sound tuning** — 0–4× volume and pitch per `sounds.json` event, applied to real playback, with
-  **Play** to hear it and a status line that says whether it actually started.
-- **Texture preview** — the inspector draws the selected image at an integer scale, next to its real
-  size and the pack that is serving it right now.
-- **Text editing** — edit any `lang` key, item names included; the key list shows the text each key
-  produces and the filter matches it, so you can search for `Diamond Sword` instead of the key.
-- **Full screen disabled list** — the DISABLED panel expands to the whole window, two columns, mouse
-  and keyboard.
-- **Client side only** — it changes what your client loads and renders. Nothing is sent to the server,
-  and packs the server pushes can be switched off locally just like your own.
-- **Everything lives in one config file** and is re-applied on startup.
+**Name.** The names the loaded packs give that object. Type a new one and the tooltip, hotbar and chat
+text change immediately; **Reset name** puts the original back. Only that object's translation key is
+overridden — no language file is edited.
+
+**Sound.** The events that belong to the object. Choose a pack layer, **Play** to hear exactly the bytes
+that layer ships, **Stop** to release the player, and set volume (0–8) and pitch (0.25–4), which are
+multiplied into real in-game playback. Each event keeps its own layer, independently of the visual layer
+and of the other events.
+
+## Pack layers
+
+Selecting an object lists the packs that actually provide part of it. Clicking a row only previews;
+**Use this layer** applies the choice and reloads resources in one step. The layer the game is using now
+is marked with `*`.
+
+- Visuals switch as a whole, so a model can never end up drawn with another pack's texture.
+- Sounds switch per event, so retuning one event does not rewrite the rest of a `sounds.json`.
+- Objects that share a texture or model ID stay consistent: a conflicting choice is reconciled for the
+  whole group instead of splitting it.
+
+When the window is too short to show the preview and the layer list together, the detail view folds into
+a compact layout with a **Preview / layers** switch.
+
+## Local edits
+
+**Edit a local copy** copies the object's current visual dependencies into a separate
+`ResourceManager-Edits` pack and opens the selected texture in your system's associated editor. Save
+there, come back and press **Reload packs** or **F5**. Files you have already touched are kept, and the
+original pack — directory or ZIP — is never modified.
 
 ## Screenshots
 
 | | |
 | --- | --- |
-| ![Search](docs/screenshot-search.png) | ![Full screen disabled list](docs/screenshot-disabled-full.png) |
-| Filtering the tree with a search query | The DISABLED panel expanded to the whole window |
-| ![Sound tuning](docs/screenshot-sound.png) | ![Text editor](docs/screenshot-text-editor.png) |
-| Tuning a sound event, with Play on the right | Editing a `lang` key of a pack (or of vanilla) |
-| ![Texture preview](docs/screenshot-texture-preview.png) | |
-| Previewing a texture that a pack overrides | |
+| ![Searching by namespace ID](docs/inventory-search.png) | ![Visuals of an item](docs/inventory-visuals.png) |
+| Searching by ID narrows the inventory to a single slot | Visuals: the texture, and the packs that provide it |
+| ![Renaming an item](docs/inventory-name.png) | ![Sound events of a creature](docs/inventory-sound.png) |
+| Name: one field, applied to the object's translation key | Sound: events, layers, playback and tuning |
+| ![Block faces](docs/inventory-block.png) | ![Compact layout](docs/inventory-compact.png) |
+| A block lists its real faces — `top`, `side` and the rest | In a short window the detail view goes compact |
 
-## Using it
-
-Press **F8** anywhere — title screen, pause screen, in a world. The key is rebindable in
-*Options → Controls → Resource Manager*.
-
-**Find a file.** Type in the search box: pack, namespace, path and file name all match, and branches
-with hits expand themselves. The category buttons cut the tree down to one kind of resource. `↑` / `↓`
-walk the rows, `→` expands, `←` collapses, a double click does both.
-
-**Disable a resource.** Select a file and press `Enter` (or *Disable resource*). "Disabled" means *this
-pack no longer provides that file*, so the fallback chain keeps walking and the next pack down the list
-serves it — disable the topmost copy of a texture and the copy below becomes visible again. The
-inspector's **State** line names the situation (`Active (this pack wins)`, `Shadowed by …`,
-`Disabled (lower packs can provide it)`), **Effective source** asks the running game who serves the file
-right now, and **Next provider** jumps to the next pack that ships it. Pack, namespace and directory
-nodes can be disabled in one click (click again to confirm); *Clear all* empties the list.
-
-**Tune a sound.** Under `sounds.json` (`♪` rows) select an event. Drag the volume / pitch sliders —
-0–4×, mouse wheel for 0.05 steps — and *Play* auditions it; the status bar says `Playing …` when it
-really started, or why it could not. *Reset* goes back to 1.00 / 1.00. The values multiply into real
-playback, so you hear the change immediately.
-
-**Look at a texture.** Select any image file and the inspector renders it scaled by whole numbers (up to
-6×), with its real size and the pack that is serving it right now, so disabling pack A's copy switches
-the preview to pack B's.
-
-**Edit text.** Filter to *Text* (or search `en_us.json`), select a `lang` file and the inspector becomes
-a text editor: key filter on top, key list in the middle, value box and **Apply** / **Revert** at the
-bottom. Every row shows the text the game displays for that key and the filter matches it too, so typing
-`Diamond Sword` (or `钻石剑`) finds `item.minecraft.diamond_sword`. That covers item and block names,
-tooltips, GUI labels and mod strings. If no loaded file declares the key you want, put the key itself in
-the filter box and press **Add key**. Item names change in the tooltip, inventory, chat and hotbar at
-once.
-
-**Full screen disabled list.** The **Full** button in the DISABLED panel spreads the list over the whole
-window in two columns (`pack | resource`): one click jumps to the entry in the tree, a double click or
-`Enter` restores it, the search box filters it, and `ESC` goes back to the three panels.
-
-## Keyboard & mouse
+## Controls
 
 | Input | Action |
 | --- | --- |
-| `F8` | Open / close the GUI |
-| single click | Select a row (in the disabled list: jump to that file) |
-| double click / `→` | Expand a node (on a file: toggle disabled); in the disabled list: restore the entry |
-| `←` | Collapse a node, or fold back to its parent |
-| `↑` / `↓` | Move the selection (scrolls into view); in the full screen list: move the highlight |
-| `Enter` | Toggle disabled on the selection; in the full screen list: restore the selection |
-| `ESC` | Close the GUI; in the full screen list: go back to the three-panel view |
-| `↓` / `Enter` / `Tab` in the search box | Leave the box and hand the keyboard to the tree |
-| `↓` / `Enter` in the key filter | Leave the box and select the first key |
-| `Enter` in the value box | Apply that text edit |
-| mouse wheel | Scroll a list; over a slider, fine-tune the value |
-| drag the scrollbar | Jump through a long list |
+| F8 | Open or close ResourceManager (rebindable in *Options → Controls*) |
+| Ctrl+F | Focus the search box |
+| Click / Enter | Open the highlighted slot |
+| Arrow keys | Move the inventory selection while a text field is not focused |
+| Mouse wheel | Scroll the inventory or a list; fine-tune a slider |
+| Escape | Leave the detail view; in the inventory, clear the search, then close |
+| F5 | Reload resource packs |
 
-## License
+## Install
 
-MIT — see [LICENSE](LICENSE).
+Java 21, Fabric Loader and Fabric API for Minecraft 1.21.4. Drop the built JAR into your instance's
+`mods` folder. Client side only: it changes what your client loads and draws, and sends nothing to the
+server. Choices are kept in `config/resourcemanager.json`.
+
+## What it can and cannot see
+
+Discovery walks item definitions, models, block states, equipment definitions, block material sounds and
+the known entity texture conventions, and lists only files that exist in the loaded packs. References a
+third-party renderer builds in Java at runtime cannot be enumerated. The texture view is a preview, not a
+3D editor, and a sound preview does not reproduce distance, randomness or the situation a sound would
+play in.
+
+## Build and verification
+
+`gradlew.bat --offline build` compiles against locally cached dependencies. To drive the real client
+widgets and the live resource providers:
+
+```powershell
+$env:RESOURCEMANAGER_INVENTORY_VERIFY='1'
+.\gradlew.bat --offline runClient
+```
+
+The last run reported **43 PASS / 0 FAIL**: [docs/inventory-verify-report.txt](docs/inventory-verify-report.txt).
+
+Deeper reading: [usage and verification](docs/INVENTORY.md) · [architecture](docs/ARCHITECTURE.md) · [中文说明](README.zh_cn.md)
+
+MIT licence: [LICENSE](LICENSE).

@@ -1,0 +1,43 @@
+PASS: Single inventory loads real registry entries
+PASS: Chinese search finds item
+PASS: ID search isolates item: query=minecraft:diamond_sword subject=null
+PASS: Focused search retains caret navigation
+PASS: Slot click opens detail
+PASS: Appearance hides JSON and metadata rows
+PASS: Hidden model remains in visual dependency graph
+PASS: Plain item does not show block textures
+PASS: Texture preview decodes real bytes
+PASS: Appearance layers include model-only and texture-only packs
+PASS: Texture-only layer provides selected texture after reload
+PASS: Model falls back to bundled asset instead of another user pack
+PASS: Appearance choice persists after reload
+PASS: 100 unchanged layouts do not decode another preview
+PASS: Model-only pack supplies model after group switch
+PASS: Group switch excludes texture from previous user pack
+PASS: Name is one entry instead of every language file
+PASS: Name editor updates actual item display text
+PASS: Name edit leaves appearance layer independent
+PASS: Sound list shows events without JSON contents or duplicate OGG rows
+PASS: Sound volume changes through real input
+PASS: Audio-only pack is available without a sound definition
+PASS: Reload preserves the selected non-first sound event
+PASS: Sound provider is independently selected
+PASS: Audio-only layer serves live audio after reload
+PASS: Audio-only layer keeps its bundled event definition
+PASS: Sound switch preserves item appearance
+PASS: Selected layer audio decodes and plays
+PASS: Stop releases audio player
+PASS: Controls fit 427x240
+PASS: Compact mode reaches pack layers
+PASS: Controls fit 427x240
+PASS: Equipment texture still resolves
+PASS: Equipment JSON remains hidden
+PASS: Block appearance includes its actual textures
+PASS: Grouped layer survives config serialization
+PASS: Empty detail search clears hidden selection and controls
+PASS: Clearing detail filter restores a visible selection
+PASS: Preparing grouped local edits preserves an existing file
+PASS: Local edit pack contains the complete model and texture group
+PASS: Editing binds the whole appearance to its local pack
+PASS: Animation metadata follows its image provider
+PASS: Grouped local edits become the live provider after reload
