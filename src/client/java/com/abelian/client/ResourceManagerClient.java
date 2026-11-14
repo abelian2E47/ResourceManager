@@ -19,6 +19,7 @@ public class ResourceManagerClient implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
         ResourceManagerConfig.replaceInstance(ResourceManagerConfig.load());
+        com.abelian.client.verify.InventoryVerify.install();
         openKey = KeyBindingHelper.registerKeyBinding(new KeyMapping(
                 "key.resourcemanager.open",
                 InputConstants.Type.KEYSYM,
@@ -39,7 +40,7 @@ public class ResourceManagerClient implements ClientModInitializer {
     }
 
     private static boolean isKeyDown(Minecraft client) {
-        InputConstants.Key key = openKey.getDefaultKey();
+        InputConstants.Key key = KeyBindingHelper.getBoundKeyOf(openKey);
         InputConstants.Type type = key.getType();
         long window = client.getWindow().getWindow();
         if (type == InputConstants.Type.KEYSYM) {

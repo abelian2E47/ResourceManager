@@ -15,7 +15,7 @@ public abstract class ScrollList extends AbstractWidget implements DragTarget {
     protected static final int SCROLLBAR_WIDTH = 6;
 
     private final Font font;
-    private final int rowHeight;
+    private int rowHeight;
     protected double scroll;
     private boolean draggingThumb;
     private int hoveredRow = -1;
@@ -50,6 +50,18 @@ public abstract class ScrollList extends AbstractWidget implements DragTarget {
 
     public int rowHeightValue() {
         return this.rowHeight;
+    }
+
+    /**
+     * Changes the height of every row after construction and re-clamps the scroll offset.
+     *
+     * <p>Additive: the original lists fix their row height in the constructor, but a list whose rows
+     * carry a variable amount of content (two text lines when there is room, one when there is not)
+     * has to be able to switch geometry when the page is laid out again.
+     */
+    public void setRowHeightValue(int height) {
+        this.rowHeight = Math.max(1, height);
+        clampScroll();
     }
 
     protected int contentHeight() {
@@ -93,6 +105,11 @@ public abstract class ScrollList extends AbstractWidget implements DragTarget {
             this.scroll = Ui.clamp(this.scroll + (top + this.rowHeight - getBottom()), 0, maxScroll());
         }
         clampScroll();
+    }
+
+    /** Visible coordinates of a row, after scroll and layout. */
+    public Ui.Rect rowBounds(int index) {
+        return new Ui.Rect(getX(), rowTop(index), Math.max(1, listRight() - getX()), rowHeightValue());
     }
 
     public void resetScroll() {

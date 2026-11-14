@@ -1,285 +1,223 @@
 package com.abelian.client;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.Collections;
-import java.util.LinkedHashSet;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
+import com.abelian.client.sound.SoundTuning;
+import com.google.gson.*;
+
 import net.minecraft.client.Minecraft;
 
-/**
- * Persistent debug state: which individual resources are hidden for a pack and the tuned volume/pitch
- * of sound events. Everything is keyed by the *normalised* pack id so that the ids shown in the GUI
- * (folder names from {@code resourcepacks/}) match the ids reported by the pack at runtime.
- */
+import java.nio.file.*;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+
+/** Persisted subject appearance, independent sound choices, and display-name edits. */
 public final class ResourceManagerConfig {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
-    private static final String FILE_NAME = "resourcemanager.json";
     private static volatile ResourceManagerConfig instance;
 
-    private final Set<String> disabled = ConcurrentHashMap.newKeySet();
+    public record Appearance(String pack, Map<String, Set<String>> sources) {}
+
+    private final Map<String, Appearance> appearances = new LinkedHashMap<>();
+    private volatile Map<String, Set<String>> visualSources = Map.of();
+    private final Map<String, String> soundLayers = new ConcurrentHashMap<>();
+    private final Map<String, String> soundDefinitions = new ConcurrentHashMap<>();
+    private final Map<String, Set<String>> soundSources = new ConcurrentHashMap<>();
     private final Map<String, SoundTuning> sounds = new ConcurrentHashMap<>();
     private final Map<String, String> texts = new ConcurrentHashMap<>();
-    private volatile int version;
-    /** Bumped whenever a language string changes so cached translations can be rebuilt. */
+    private final Set<String> legacyDisabled = ConcurrentHashMap.newKeySet();
     private volatile int textVersion;
 
-    private ResourceManagerConfig() {
-    }
+    private ResourceManagerConfig() {}
 
     public static ResourceManagerConfig instance() {
-        ResourceManagerConfig current = instance;
-        if (current == null) {
+        if (instance == null)
             synchronized (ResourceManagerConfig.class) {
-                if (instance == null) {
-                    instance = load();
-                }
-                current = instance;
+                if (instance == null) instance = load();
             }
-        }
-        return current;
+        return instance;
     }
 
-    /** Replaces the shared instance; used by the client initialiser after reading the config file. */
     public static void replaceInstance(ResourceManagerConfig config) {
         instance = config;
     }
 
-    public static ResourceManagerConfig load() {
-        ResourceManagerConfig config = new ResourceManagerConfig();
-        Path file = config.path();
-        if (!Files.exists(file)) {
-            return config;
-        }
-        try {
-            JsonObject root = GSON.fromJson(Files.readString(file), JsonObject.class);
-            if (root == null) {
-                return config;
-            }
-            JsonArray disabled = root.getAsJsonArray("disabled");
-            if (disabled != null) {
-                for (JsonElement value : disabled) {
-                    if (value.isJsonPrimitive()) {
-                        config.disabled.add(value.getAsString());
-                    }
-                }
-            }
-            JsonObject soundObject = root.getAsJsonObject("sounds");
-            if (soundObject != null) {
-                for (Map.Entry<String, JsonElement> entry : soundObject.entrySet()) {
-                    if (entry.getValue().isJsonObject()) {
-                        JsonObject tuning = entry.getValue().getAsJsonObject();
-                        config.sounds.put(entry.getKey(), new SoundTuning(
-                                number(tuning, "volume", 1.0F),
-                                number(tuning, "pitch", 1.0F)));
-                    }
-                }
-            }
-            JsonObject textObject = root.getAsJsonObject("texts");
-            if (textObject != null) {
-                for (Map.Entry<String, JsonElement> entry : textObject.entrySet()) {
-                    if (entry.getValue().isJsonPrimitive()) {
-                        config.texts.put(entry.getKey(), entry.getValue().getAsString());
-                    }
-                }
-            }
-        } catch (Exception ignored) {
-            // A broken debug file must never stop the client from starting.
-        }
-        return config;
+    public static String normalizePackId(String id) {
+        return id == null ? "" : id.startsWith("file/") ? id.substring(5) : id;
     }
 
-    private static float number(JsonObject object, String key, float fallback) {
-        JsonElement value = object.get(key);
-        return value != null && value.isJsonPrimitive() ? value.getAsFloat() : fallback;
+    public synchronized Appearance appearance(String subject) {
+        return appearances.get(subject);
     }
 
-    /** {@code file/MyPack.zip} is the runtime id, {@code MyPack.zip} is what the GUI shows. */
-    public static String normalizePackId(String packId) {
-        if (packId == null) {
-            return "";
-        }
-        return packId.startsWith("file/") ? packId.substring("file/".length()) : packId;
+    public synchronized Map<String, Appearance> appearances() {
+        return Map.copyOf(appearances);
     }
 
-    public static String key(String packId, String location) {
-        return normalizePackId(packId) + "|" + location;
+    public synchronized void setAppearance(
+            String subject, String pack, Map<String, Set<String>> sources) {
+        appearances.remove(subject);
+        appearances.put(subject, new Appearance(normalizePackId(pack), Map.copyOf(sources)));
+        legacyDisabled.removeIf(
+                key -> sources.keySet().stream().anyMatch(file -> key.endsWith("|" + file)));
+        Map<String, Set<String>> built = new HashMap<>();
+        appearances.values().forEach(choice -> built.putAll(choice.sources()));
+        visualSources = Map.copyOf(built);
     }
 
-    public boolean isDisabled(String packId, String location) {
-        return disabled.contains(key(packId, location));
+    public String soundLayer(String event) {
+        return soundLayers.getOrDefault(event, "");
     }
 
-    public boolean isDisabledKey(String key) {
-        return disabled.contains(key);
+    public Map<String, String> soundLayers() {
+        return Map.copyOf(soundLayers);
     }
 
-    public void setDisabled(String packId, String location, boolean value) {
-        setDisabledKey(key(packId, location), value);
+    public Map<String, String> soundDefinitions() {
+        return Map.copyOf(soundDefinitions);
     }
 
-    public void setDisabledKey(String key, boolean value) {
-        if (value ? disabled.add(key) : disabled.remove(key)) {
-            version++;
-        }
+    public void setSoundLayer(
+            String event, String pack, String definition, Map<String, Set<String>> files) {
+        String id = normalizePackId(pack);
+        soundLayers.put(event, id);
+        soundDefinitions.put(event, normalizePackId(definition));
+        files.forEach(
+                (file, base) -> {
+                    soundSources.put(file, Set.copyOf(base));
+                    legacyDisabled.removeIf(key -> key.endsWith("|" + file));
+                });
     }
 
-    /** Live view of the disabled keys, safe to iterate from the render thread. */
-    public Set<String> disabledKeys() {
-        return Collections.unmodifiableSet(disabled);
+    public boolean isDisabled(String pack, String location) {
+        String id = normalizePackId(pack);
+        var visual = visualSources.get(location);
+        var audio = soundSources.get(location);
+        return visual != null
+                ? !visual.contains(id)
+                : audio != null
+                        ? !audio.contains(id)
+                        : legacyDisabled.contains(id + "|" + location);
     }
 
-    public int disabledCount() {
-        return disabled.size();
+    public SoundTuning soundTuning(String event) {
+        return sounds.getOrDefault(event, SoundTuning.DEFAULT);
     }
 
-    public void clearDisabled() {
-        if (!disabled.isEmpty()) {
-            disabled.clear();
-            version++;
-        }
+    public void setSoundTuning(String event, SoundTuning tuning) {
+        if (event == null || event.isEmpty()) return;
+        if (tuning.isDefault()) sounds.remove(event);
+        else sounds.put(event, tuning);
     }
 
-    public int disabledCountForPack(String packId) {
-        String prefix = normalizePackId(packId) + "|";
-        int count = 0;
-        for (String key : disabled) {
-            if (key.startsWith(prefix)) {
-                count++;
-            }
-        }
-        return count;
-    }
-
-    public SoundTuning sound(String event) {
-        SoundTuning direct = sounds.get(event);
-        if (direct != null) {
-            return direct;
-        }
-        // Older files stored "<pack>|<namespace>:<event>"; keep honouring those entries.
-        for (Map.Entry<String, SoundTuning> entry : sounds.entrySet()) {
-            int separator = entry.getKey().indexOf('|');
-            if (separator >= 0 && entry.getKey().substring(separator + 1).equals(event)) {
-                return entry.getValue();
-            }
-        }
-        return SoundTuning.DEFAULT;
-    }
-
-    public void setSound(String event, float volume, float pitch) {
-        float clampedVolume = clamp(volume);
-        float clampedPitch = clamp(pitch);
-        if (Math.abs(clampedVolume - 1.0F) < 0.001F && Math.abs(clampedPitch - 1.0F) < 0.001F) {
-            if (sounds.remove(event) != null) {
-                version++;
-            }
-            return;
-        }
-        sounds.put(event, new SoundTuning(clampedVolume, clampedPitch));
-        version++;
-    }
-
-    public Map<String, SoundTuning> sounds() {
-        return Map.copyOf(sounds);
-    }
-
-    // ------------------------------------------------------------------ language text
-
-    /** The override for a translation key, or {@code null} when the pack text is used as is. */
     public String text(String key) {
-        return key == null ? null : texts.get(key);
+        return texts.get(key);
     }
 
-    /** Replaces the value shown for a translation key; {@code null} or empty restores the pack text. */
-    public void setText(String key, String value) {
-        if (key == null) {
-            return;
-        }
-        if (value == null || value.isEmpty()) {
-            if (texts.remove(key) != null) {
-                textVersion++;
-                version++;
-            }
-            return;
-        }
-        if (!value.equals(texts.put(key, value))) {
-            textVersion++;
-            version++;
-        }
-    }
-
-    public Map<String, String> texts() {
-        return Map.copyOf(texts);
-    }
-
-    public int textCount() {
-        return texts.size();
-    }
-
-    /** Changes whenever a text override is added, changed or removed. */
     public int textVersion() {
         return textVersion;
     }
 
-    public int tunedSoundCount() {
-        return sounds.size();
+    public void setText(String key, String value) {
+        String old = value == null || value.isEmpty() ? texts.remove(key) : texts.put(key, value);
+        if (!Objects.equals(old, value == null || value.isEmpty() ? null : value)) textVersion++;
     }
 
-    /** Bumped on every mutation so the GUI can invalidate caches. */
-    public int version() {
-        return version;
+    private static Path path() {
+        return Minecraft.getInstance()
+                .gameDirectory
+                .toPath()
+                .resolve("config/resourcemanager.json");
     }
 
-    public void save() {
+    public static ResourceManagerConfig load() {
+        ResourceManagerConfig config = new ResourceManagerConfig();
+        if (!Files.exists(path())) return config;
         try {
-            Path file = path();
-            Path parent = file.getParent();
-            if (parent != null) {
-                Files.createDirectories(parent);
-            }
-            JsonObject root = new JsonObject();
-            JsonArray disabled = new JsonArray();
-            new LinkedHashSet<>(this.disabled).stream().sorted().forEach(disabled::add);
-            root.add("disabled", disabled);
-            JsonObject soundObject = new JsonObject();
-            sounds.entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(entry -> {
-                JsonObject tuning = new JsonObject();
-                tuning.addProperty("volume", entry.getValue().volume());
-                tuning.addProperty("pitch", entry.getValue().pitch());
-                soundObject.add(entry.getKey(), tuning);
-            });
-            root.add("sounds", soundObject);
-            JsonObject textObject = new JsonObject();
-            texts.entrySet().stream().sorted(Map.Entry.comparingByKey())
-                    .forEach(entry -> textObject.addProperty(entry.getKey(), entry.getValue()));
-            root.add("texts", textObject);
-            Files.writeString(file, GSON.toJson(root));
-        } catch (IOException ignored) {
-            // Configuration is best effort; runtime behaviour stays usable.
+            JsonObject root = JsonParser.parseString(Files.readString(path())).getAsJsonObject();
+            if (root.has("disabled"))
+                root.getAsJsonArray("disabled")
+                        .forEach(e -> config.legacyDisabled.add(e.getAsString()));
+            if (root.has("texts"))
+                root.getAsJsonObject("texts")
+                        .entrySet()
+                        .forEach(e -> config.texts.put(e.getKey(), e.getValue().getAsString()));
+            if (root.has("sounds"))
+                root.getAsJsonObject("sounds")
+                        .entrySet()
+                        .forEach(
+                                e -> {
+                                    var value = e.getValue().getAsJsonObject();
+                                    String key = e.getKey();
+                                    int split = key.indexOf('|');
+                                    config.setSoundTuning(
+                                            split < 0 ? key : key.substring(split + 1),
+                                            new SoundTuning(
+                                                    number(value, "volume"),
+                                                    number(value, "pitch")));
+                                });
+            if (root.has("appearances"))
+                root.getAsJsonObject("appearances")
+                        .entrySet()
+                        .forEach(
+                                e -> {
+                                    var v = e.getValue().getAsJsonObject();
+                                    config.setAppearance(
+                                            e.getKey(),
+                                            v.get("pack").getAsString(),
+                                            sources(v.getAsJsonObject("sources")));
+                                });
+            if (root.has("soundLayers"))
+                root.getAsJsonObject("soundLayers")
+                        .entrySet()
+                        .forEach(
+                                e ->
+                                        config.soundLayers.put(
+                                                e.getKey(), e.getValue().getAsString()));
+            config.soundDefinitions.putAll(config.soundLayers);
+            if (root.has("soundDefinitions"))
+                root.getAsJsonObject("soundDefinitions")
+                        .entrySet()
+                        .forEach(
+                                e ->
+                                        config.soundDefinitions.put(
+                                                e.getKey(), e.getValue().getAsString()));
+            if (root.has("soundSources"))
+                config.soundSources.putAll(sources(root.getAsJsonObject("soundSources")));
+        } catch (Exception error) {
+            com.abelian.ResourceManager.LOGGER.warn("Could not read ResourceManager config", error);
         }
+        return config;
     }
 
-    private Path path() {
-        return Minecraft.getInstance().gameDirectory.toPath().resolve("config").resolve(FILE_NAME);
+    private static float number(JsonObject object, String key) {
+        return object.has(key) ? object.get(key).getAsFloat() : 1;
     }
 
-    private static float clamp(float value) {
-        return Math.max(0.0F, Math.min(4.0F, value));
+    private static Map<String, Set<String>> sources(JsonObject json) {
+        Map<String, Set<String>> result = new HashMap<>();
+        json.entrySet()
+                .forEach(
+                        e -> {
+                            Set<String> ids = new HashSet<>();
+                            e.getValue().getAsJsonArray().forEach(id -> ids.add(id.getAsString()));
+                            result.put(e.getKey(), Set.copyOf(ids));
+                        });
+        return result;
     }
 
-    public record SoundTuning(float volume, float pitch) {
-        public static final SoundTuning DEFAULT = new SoundTuning(1.0F, 1.0F);
-
-        public boolean isDefault() {
-            return Math.abs(volume - 1.0F) < 0.001F && Math.abs(pitch - 1.0F) < 0.001F;
+    public synchronized void save() {
+        try {
+            Files.createDirectories(path().getParent());
+            JsonObject root = new JsonObject();
+            root.add("disabled", GSON.toJsonTree(legacyDisabled));
+            root.add("texts", GSON.toJsonTree(texts));
+            root.add("sounds", GSON.toJsonTree(sounds));
+            root.add("appearances", GSON.toJsonTree(appearances));
+            root.add("soundLayers", GSON.toJsonTree(soundLayers));
+            root.add("soundDefinitions", GSON.toJsonTree(soundDefinitions));
+            root.add("soundSources", GSON.toJsonTree(soundSources));
+            Files.writeString(path(), GSON.toJson(root));
+        } catch (Exception error) {
+            com.abelian.ResourceManager.LOGGER.warn("Could not save ResourceManager config", error);
         }
     }
 }

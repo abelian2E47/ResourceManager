@@ -1,6 +1,7 @@
 package com.abelian.client.mixin;
 
 import com.abelian.client.ResourceManagerConfig;
+import com.abelian.client.sound.SoundTuning;
 import net.minecraft.client.resources.sounds.AbstractSoundInstance;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -18,7 +19,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 public abstract class SoundInstanceMixin {
     @Inject(method = "getVolume", at = @At("RETURN"), cancellable = true)
     private void resourcemanager$applyVolume(CallbackInfoReturnable<Float> cir) {
-        ResourceManagerConfig.SoundTuning tuning = resourcemanager$tuning();
+        SoundTuning tuning = resourcemanager$tuning();
         if (!tuning.isDefault()) {
             cir.setReturnValue(cir.getReturnValue() * tuning.volume());
         }
@@ -26,14 +27,14 @@ public abstract class SoundInstanceMixin {
 
     @Inject(method = "getPitch", at = @At("RETURN"), cancellable = true)
     private void resourcemanager$applyPitch(CallbackInfoReturnable<Float> cir) {
-        ResourceManagerConfig.SoundTuning tuning = resourcemanager$tuning();
+        SoundTuning tuning = resourcemanager$tuning();
         if (!tuning.isDefault()) {
             cir.setReturnValue(cir.getReturnValue() * tuning.pitch());
         }
     }
 
-    private ResourceManagerConfig.SoundTuning resourcemanager$tuning() {
+    private SoundTuning resourcemanager$tuning() {
         AbstractSoundInstance sound = (AbstractSoundInstance) (Object) this;
-        return ResourceManagerConfig.instance().sound(sound.getLocation().toString());
+        return ResourceManagerConfig.instance().soundTuning(sound.getLocation().toString());
     }
 }

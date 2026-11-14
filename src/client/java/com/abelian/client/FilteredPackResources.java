@@ -3,10 +3,7 @@ package com.abelian.client;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import java.io.IOException;
-import java.io.InputStream;
-import java.util.LinkedHashMap;
-import java.util.Map;
+
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.PackLocationInfo;
 import net.minecraft.server.packs.PackResources;
@@ -14,14 +11,19 @@ import net.minecraft.server.packs.PackType;
 import net.minecraft.server.packs.metadata.MetadataSectionType;
 import net.minecraft.server.packs.resources.IoSupplier;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 /**
  * Decorates a resource pack so that individually disabled files are invisible to the game.
  *
- * <p>1.21.4 resolves resources by asking packs from the highest priority one downwards and stopping at
- * the first pack that answers ({@code FallbackResourceManager.getResource}). Hiding a file at this level
- * therefore makes the next pack in the loading order provide it, which is exactly the behaviour the GUI
- * promises. Vanilla's own pack filters cannot be used for this: they abort the lookup instead of
- * continuing with the lower priority packs.
+ * <p>1.21.4 resolves resources by asking packs from the highest priority one downwards and stopping
+ * at the first pack that answers ({@code FallbackResourceManager.getResource}). Hiding a file at
+ * this level therefore makes the next pack in the loading order provide it, which is exactly the
+ * behaviour the GUI promises. Vanilla's own pack filters cannot be used for this: they abort the
+ * lookup instead of continuing with the lower priority packs.
  */
 public final class FilteredPackResources implements PackResources {
     private final PackResources delegate;
@@ -36,7 +38,13 @@ public final class FilteredPackResources implements PackResources {
         if (pack instanceof FilteredPackResources) {
             return pack;
         }
-        return new FilteredPackResources(pack, ResourceManagerConfig.normalizePackId(pack.packId()));
+        return new FilteredPackResources(
+                pack, ResourceManagerConfig.normalizePackId(pack.packId()));
+    }
+
+    /** Raw copies are needed to inspect and edit layers that the runtime filter hides. */
+    public static PackResources raw(PackResources pack) {
+        return pack instanceof FilteredPackResources filtered ? raw(filtered.delegate) : pack;
     }
 
     @Override
@@ -49,16 +57,46 @@ public final class FilteredPackResources implements PackResources {
         if (ResourceManagerConfig.instance().isDisabled(configId, location.toString())) {
             return null;
         }
-        return delegate.getResource(type, location);
+        return selectedSounds(location, delegate.getResource(type, location));
     }
 
     @Override
     public void listResources(PackType type, String namespace, String path, ResourceOutput output) {
-        delegate.listResources(type, namespace, path, (location, supplier) -> {
-            if (!ResourceManagerConfig.instance().isDisabled(configId, location.toString())) {
-                output.accept(location, supplier);
+        delegate.listResources(
+                type,
+                namespace,
+                path,
+                (location, supplier) -> {
+                    if (!ResourceManagerConfig.instance()
+                            .isDisabled(configId, location.toString())) {
+                        output.accept(location, selectedSounds(location, supplier));
+                    }
+                });
+    }
+
+    private IoSupplier<InputStream> selectedSounds(
+            ResourceLocation location, IoSupplier<InputStream> original) {
+        if (original == null || !location.getPath().equals("sounds.json")) return original;
+        var choices = ResourceManagerConfig.instance().soundDefinitions();
+        if (choices.isEmpty()) return original;
+        return () -> {
+            try (var reader =
+                    new java.io.InputStreamReader(
+                            original.get(), java.nio.charset.StandardCharsets.UTF_8)) {
+                JsonObject json = JsonParser.parseReader(reader).getAsJsonObject();
+                String prefix = location.getNamespace() + ":";
+                choices.forEach(
+                        (event, pack) -> {
+                            if (!event.startsWith(prefix)) return;
+                            String key = event.substring(prefix.length());
+                            if (!pack.equals(configId)) json.remove(key);
+                            else if (json.has(key) && json.get(key).isJsonObject())
+                                json.getAsJsonObject(key).addProperty("replace", true);
+                        });
+                return new java.io.ByteArrayInputStream(
+                        json.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
             }
-        });
+        };
     }
 
     @Override
@@ -76,7 +114,9 @@ public final class FilteredPackResources implements PackResources {
         return delegate.location();
     }
 
-    /** Kept identical to the delegate: other code reports this id as {@code Resource#sourcePackId}. */
+    /**
+     * Kept identical to the delegate: other code reports this id as {@code Resource#sourcePackId}.
+     */
     @Override
     public String packId() {
         return delegate.packId();
@@ -84,7 +124,8 @@ public final class FilteredPackResources implements PackResources {
 
     @Override
     public void close() {
-        // The pack lifecycle is owned by the list handed to MultiPackResourceManager, which closes the
+        // The pack lifecycle is owned by the list handed to MultiPackResourceManager, which closes
+        // the
         // original instances; closing the delegate here would double-close it.
     }
 
@@ -96,7 +137,8 @@ public final class FilteredPackResources implements PackResources {
         if (supplier == null) {
             return events;
         }
-        try (var reader = new java.io.BufferedReader(new java.io.InputStreamReader(supplier.get()))) {
+        try (var reader =
+                new java.io.BufferedReader(new java.io.InputStreamReader(supplier.get()))) {
             JsonElement root = JsonParser.parseReader(reader);
             if (root instanceof JsonObject object) {
                 for (Map.Entry<String, JsonElement> entry : object.entrySet()) {
