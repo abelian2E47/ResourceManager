@@ -22,8 +22,9 @@ overridden — no language file is edited.
 
 **Sound.** The events that belong to the object. Choose a pack layer, **Play** to hear exactly the bytes
 that layer ships, **Stop** to release the player, and set volume (0–8) and pitch (0.25–4), which are
-multiplied into real in-game playback. Each event keeps its own layer, independently of the visual layer
-and of the other events.
+multiplied into real in-game playback. Vanilla then clamps what it plays — pitch to 0.5–2, total volume
+to 1 — so settings past those limits only lift events a pack already registered quieter or off-pitch.
+Each event keeps its own layer, independently of the visual layer and of the other events.
 
 ## Pack layers
 

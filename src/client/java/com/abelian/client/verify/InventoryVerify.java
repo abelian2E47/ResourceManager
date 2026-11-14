@@ -3,6 +3,7 @@ package com.abelian.client.verify;
 import com.abelian.client.*;
 import com.abelian.client.catalog.*;
 import com.abelian.client.catalog.SubjectCatalog.*;
+import com.abelian.client.sound.SoundTuning;
 import com.abelian.client.ui.*;
 
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
@@ -10,8 +11,12 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
 import net.minecraft.client.gui.components.*;
 import net.minecraft.client.gui.screens.TitleScreen;
+import net.minecraft.client.resources.sounds.SimpleSoundInstance;
+import net.minecraft.client.resources.sounds.SoundInstance;
 import net.minecraft.network.chat.contents.TranslatableContents;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.sounds.SoundSource;
+import net.minecraft.util.RandomSource;
 import net.minecraft.world.item.*;
 
 import org.lwjgl.glfw.GLFW;
@@ -261,16 +266,32 @@ public final class InventoryVerify {
                                                                     .getPath()
                                                                     .equals("sounds.json")),
                             "Sound list shows events without JSON contents or duplicate OGG rows");
-                    var slider =
+                    var sliders =
                             gui.children().stream()
                                     .filter(w -> w instanceof UiSlider s && s.visible)
                                     .map(w -> (UiSlider) w)
-                                    .min(Comparator.comparingInt(UiSlider::getY))
-                                    .orElseThrow();
-                    click(gui, slider.getX() + slider.getWidth() * 2 / 3, slider.getY() + 6);
+                                    .sorted(Comparator.comparingInt(UiSlider::getY))
+                                    .toList();
+                    String tuned = page.selectedAsset().eventKey();
                     check(
-                            gui.soundTuning(page.selectedAsset().eventKey()).volume() != 1,
+                            sliders.size() == 2,
+                            "Sound detail offers volume and pitch sliders: " + sliders.size());
+                    click(
+                            gui,
+                            sliders.get(0).getX() + sliders.get(0).getWidth() * 2 / 3,
+                            sliders.get(0).getY() + 6);
+                    check(
+                            gui.soundTuning(tuned).volume() != 1,
                             "Sound volume changes through real input");
+                    click(
+                            gui,
+                            sliders.get(1).getX() + sliders.get(1).getWidth() * 2 / 3,
+                            sliders.get(1).getY() + 6);
+                    check(
+                            gui.soundTuning(tuned).pitch() != 1,
+                            "Sound pitch changes through real input");
+                    checkTuningReachesPlayback(client, gui, tuned);
+                    checkTuningRoundTrip(gui, tuned);
                     page.selectAsset(
                             page.visibleAssets().stream()
                                     .filter(a -> a.eventKey().endsWith(".hurt"))
@@ -559,6 +580,69 @@ public final class InventoryVerify {
                 .getResource(ResourceLocation.parse("minecraft:" + path))
                 .map(r -> r.sourcePackId())
                 .orElse("");
+    }
+
+    /**
+     * Proves the tuning reaches real playback. The engine multiplies what it reads from
+     * {@code getVolume()}/{@code getPitch()} into the channel, so the mixin has to show up there. Two
+     * instances of the same event sampled from the same seed cancel the event's own random volume and
+     * pitch and leave only the multiplier.
+     */
+    private void checkTuningReachesPlayback(
+            Minecraft client, ResourceManagerScreen gui, String event) {
+        SoundTuning tuning = gui.soundTuning(event);
+        float[] tuned = playbackVolumeAndPitch(client, event);
+        gui.config().setSoundTuning(event, SoundTuning.DEFAULT);
+        float[] plain = playbackVolumeAndPitch(client, event);
+        gui.config().setSoundTuning(event, tuning);
+        check(
+                plain[0] > 0 && near(tuned[0] / plain[0], tuning.volume()),
+                "Game playback multiplies volume by "
+                        + tuning.volume()
+                        + " ("
+                        + plain[0]
+                        + " -> "
+                        + tuned[0]
+                        + ")");
+        check(
+                near(tuned[1] / plain[1], tuning.pitch()),
+                "Game playback multiplies pitch by "
+                        + tuning.pitch()
+                        + " ("
+                        + plain[1]
+                        + " -> "
+                        + tuned[1]
+                        + ")");
+    }
+
+    /** Volume and pitch a real sound instance reports for the tuned event. */
+    private float[] playbackVolumeAndPitch(Minecraft client, String event) {
+        var instance =
+                new SimpleSoundInstance(
+                        ResourceLocation.parse(event),
+                        SoundSource.NEUTRAL,
+                        1,
+                        1,
+                        RandomSource.create(7L),
+                        false,
+                        0,
+                        SoundInstance.Attenuation.NONE,
+                        0,
+                        0,
+                        0,
+                        false);
+        instance.resolve(client.getSoundManager());
+        return new float[] {instance.getVolume(), instance.getPitch()};
+    }
+
+    private void checkTuningRoundTrip(ResourceManagerScreen gui, String event) {
+        gui.config().save();
+        SoundTuning stored = ResourceManagerConfig.load().soundTuning(event);
+        check(stored.equals(gui.soundTuning(event)), "Sound tuning survives a config round trip");
+    }
+
+    private static boolean near(float actual, float expected) {
+        return Math.abs(actual - expected) <= 1.0E-3f + Math.abs(expected) * 1.0E-3f;
     }
 
     private void search(ResourceManagerScreen gui, String value) {

@@ -18,7 +18,12 @@ PASS: Name is one entry instead of every language file
 PASS: Name editor updates actual item display text
 PASS: Name edit leaves appearance layer independent
 PASS: Sound list shows events without JSON contents or duplicate OGG rows
+PASS: Sound detail offers volume and pitch sliders: 2
 PASS: Sound volume changes through real input
+PASS: Sound pitch changes through real input
+PASS: Game playback multiplies volume by 5.441176 (1.0 -> 5.441176)
+PASS: Game playback multiplies pitch by 2.838968 (1.0 -> 2.838968)
+PASS: Sound tuning survives a config round trip
 PASS: Audio-only pack is available without a sound definition
 PASS: Reload preserves the selected non-first sound event
 PASS: Sound provider is independently selected
