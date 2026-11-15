@@ -17,14 +17,14 @@
 还原原样。只覆盖这个对象的翻译键，不改写任何语言文件。
 
 **音效。** 属于这个对象的事件。选择资源包层后 **试听** 播放该层真正的音频字节，**停止** 释放播放器，
-**静音** 让该事件在游戏内和试听中都不出声（再点一次恢复原音量）；音量 0–16、音高 0.5–2 会乘进
+**静音** 让该事件在游戏内不出声（再点一次恢复原音量）；音量 0–16、音高 0.5–2 会乘进
 真实游戏播放。音高范围正是原版允许的范围；音量是原版把总音量夹到 1 之前的倍数，所以高端只对包内
 登记得比满音量更轻的事件有效。每个事件各自保留一层，与外观层、与其他事件都互不影响。
 
 ## 资源包层
 
 进入详情会列出真正提供了这个对象某个部分的资源包。点击一行只是预览，**游戏使用此层** 才应用并重载资源。
-当前生效的层前面有 `*`。
+当前生效的层的行首有一条绿色竖条。
 
 - 外观整组切换，模型不会配到另一个包的贴图。
 - 音效按事件切换，调一个事件不会改写整份 `sounds.json`。
@@ -82,7 +82,7 @@ $env:RESOURCEMANAGER_INVENTORY_VERIFY='1'
 .\gradlew.bat --offline runClient
 ```
 
-最近一轮结果为 **43 PASS / 0 FAIL**：[docs/inventory-verify-report.txt](docs/inventory-verify-report.txt)。
+最近一轮结果为 **55 PASS / 0 FAIL**：[docs/inventory-verify-report.txt](docs/inventory-verify-report.txt)。
 
 继续阅读：[使用与验证](docs/INVENTORY.md) · [架构说明](docs/ARCHITECTURE.md) · [English](README.md)
 

@@ -13,6 +13,8 @@
   "resourcemanager.inventory.back": "返回",
   "resourcemanager.inventory.browse": "物品与生物",
   "resourcemanager.inventory.count": "%s 个结果 / 共 %s 个对象",
+  "resourcemanager.inventory.assetCount": "%s 项",
+  "resourcemanager.inventory.assetCount.one": "1 项",
   "resourcemanager.inventory.loading": "正在读取已加载资源…",
   "resourcemanager.inventory.empty": "没有匹配结果，请尝试名称或命名空间:ID",
   "resourcemanager.inventory.apply": "游戏使用此层",
@@ -42,7 +44,7 @@
   "resourcemanager.inventory.mode.1": "名称",
   "resourcemanager.inventory.mode.2": "音效",
   "resourcemanager.inventory.emptySection": "暂无相关资源",
-  "resourcemanager.inventory.appearance.layers": "物品外观层 (%s)",
+  "resourcemanager.inventory.appearance.layers": "外观覆盖层 (%s)",
   "resourcemanager.inventory.appearance.hint": "模型与贴图一起切换；缺少的部分使用内置资源",
   "resourcemanager.inventory.appearance.fallback": "此部分使用内置资源"
 }

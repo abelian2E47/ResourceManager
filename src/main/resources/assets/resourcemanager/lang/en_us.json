@@ -13,6 +13,8 @@
   "resourcemanager.inventory.back": "Back",
   "resourcemanager.inventory.browse": "Items & creatures",
   "resourcemanager.inventory.count": "%s results / %s entries",
+  "resourcemanager.inventory.assetCount": "%s entries",
+  "resourcemanager.inventory.assetCount.one": "1 entry",
   "resourcemanager.inventory.loading": "Reading loaded resources…",
   "resourcemanager.inventory.empty": "No matches. Try a name or namespace:id.",
   "resourcemanager.inventory.apply": "Use this layer",

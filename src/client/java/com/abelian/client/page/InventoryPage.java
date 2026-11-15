@@ -9,6 +9,7 @@ import com.abelian.client.ui.*;
 
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.PackType;
@@ -20,6 +21,10 @@ import java.util.*;
 /** Object inventory and three direct tasks: appearance, display name and sound. */
 public final class InventoryPage {
     private static final int SLOT = 22;
+    private static final int PAD = 6;
+    private static final int GAP = 6;
+    /** Below this frame height the inspector folds into the preview/layers toggle. */
+    private static final int COMPACT_HEIGHT = 252;
     private final ResourceManagerScreen host;
     private SubjectCatalog catalog;
     private int generation = -1, textVersion = -1;
@@ -30,6 +35,8 @@ public final class InventoryPage {
             previewSource = "",
             rawText = "";
     private int kind, mode, scrollRow, cursor, columns = 9, rows = 5;
+    /** Set when the search text or the language changed, so the next refresh rebuilds the rows. */
+    private boolean searchDirty = true;
     private Subject subject;
     private Asset asset;
     private AppearanceLayers appearance;
@@ -46,7 +53,7 @@ public final class InventoryPage {
     private final Map<String, Float> lastVolume = new HashMap<>();
     private LayerList layers;
     private AssetList list;
-    private boolean compactLayers;
+    private boolean compactLayers, compact, showControls, showLayers;
     private Ui.Rect frame = new Ui.Rect(0, 0, 0, 0),
             grid = frame,
             inspector = frame,
@@ -75,22 +82,25 @@ public final class InventoryPage {
             final int value = i;
             kinds.add(
                     button(
-                            "resourcemanager.inventory.kind." + i,
-                            () -> {
-                                kind = value;
-                                refreshSearch();
-                                scrollRow = cursor = 0;
-                            }));
+                                    "resourcemanager.inventory.kind." + i,
+                                    () -> {
+                                        kind = value;
+                                        refreshSearch();
+                                        scrollRow = cursor = 0;
+                                    })
+                            .setStyle(UiButton.Style.TAB));
         }
         for (int i = 0; i < 3; i++) {
             final int value = i;
-            modes.add(button("resourcemanager.inventory.mode." + i, () -> setMode(value)));
+            modes.add(button("resourcemanager.inventory.mode." + i, () -> setMode(value))
+                    .setStyle(UiButton.Style.TAB));
         }
         layers = host.add(new LayerList(host.font(), this::selectLayer));
         controls.add(layers);
         list = host.add(new AssetList());
         controls.add(list);
-        apply = button("resourcemanager.inventory.apply", this::applyLayer);
+        apply = button("resourcemanager.inventory.apply", this::applyLayer)
+                .setStyle(UiButton.Style.PRIMARY);
         apply.setTooltip(tr("appearance.hint"));
         play = button("resourcemanager.ui.action.play", this::play);
         stop = button("resourcemanager.inventory.stop", PackSoundPreview::stop);
@@ -137,7 +147,7 @@ public final class InventoryPage {
                                         0,
                                         0,
                                         1,
-                                        16,
+                                        18,
                                         tr(label),
                                         min,
                                         max,
@@ -196,7 +206,7 @@ public final class InventoryPage {
         if (generation != host.indexGeneration()) {
             generation = host.indexGeneration();
             catalog = new SubjectCatalog(host.snapshot());
-            query = "\0";
+            searchDirty = true;
             if (subject != null) {
                 String key = subject.key();
                 subject =
@@ -207,7 +217,8 @@ public final class InventoryPage {
                 if (subject != null) loadSubject();
             }
         }
-        if (!query.equals(host.searchQuery()) || textVersion != host.config().textVersion()) {
+        if (searchDirty || !query.equals(host.searchQuery()) || textVersion != host.config().textVersion()) {
+            searchDirty = false;
             query = host.searchQuery();
             textVersion = host.config().textVersion();
             if (subject == null) {
@@ -436,10 +447,11 @@ public final class InventoryPage {
             host.setStatus(Component.literal(tr("audio.empty")));
             return;
         }
+        var providers = host.snapshot().providersOf(file);
         String source =
-                host.snapshot().providersOf(file).stream().anyMatch(n -> n.packId().equals(pack))
+                providers.stream().anyMatch(n -> n.packId().equals(pack))
                         ? pack
-                        : host.snapshot().providersOf(file).stream()
+                        : providers.stream()
                                 .filter(
                                         n ->
                                                 !host.snapshot()
@@ -463,153 +475,205 @@ public final class InventoryPage {
         int w = Math.min(subject == null ? 440 : 610, area.w()), h = Math.min(340, area.h());
         frame = new Ui.Rect(area.x() + (area.w() - w) / 2, area.y() + (area.h() - h) / 2, w, h);
         controls.forEach(host::hideWidget);
-        int x = frame.x() + 8, y = frame.y() + 8;
+        int x = frame.x() + PAD, y = frame.y() + PAD, inner = w - PAD * 2;
         if (subject == null) {
-            int bw = Math.min(76, (w - 20) / 4);
+            int bw = inner / 4;
             for (int i = 0; i < 4; i++) {
-                host.showWidget(kinds.get(i), x + i * (bw + 2), y, bw, 18);
+                host.showWidget(kinds.get(i), x + i * bw, y, bw, 18);
                 kinds.get(i).setToggled(kind == i);
             }
-            columns = Math.max(1, Math.min(18, (w - 34) / SLOT));
-            rows = Math.max(1, (h - 75) / SLOT);
+            columns = Math.max(1, Math.min(18, (inner - 12) / SLOT));
+            rows = Math.max(1, (h - PAD * 2 - 38) / SLOT);
             grid =
                     new Ui.Rect(
-                            frame.x() + (w - columns * SLOT - 12) / 2,
-                            y + 36,
+                            frame.x() + (w - columns * SLOT - 10) / 2,
+                            y + 38,
                             columns * SLOT,
                             rows * SLOT);
             return;
         }
-        host.showWidget(back, x, y, 58, 18);
-        int left = Math.max(100, (w - 26) * 42 / 100), right = w - 26 - left;
+        compact = h < COMPACT_HEIGHT;
+        showControls = !compact || !compactLayers;
+        showLayers = !compact || compactLayers;
+        host.showWidget(back, x, y + 1, 48, 18);
+        if (compact) {
+            host.showWidget(layerMode, frame.right() - PAD - 96, y + 1, 96, 18);
+            layerMode.setToggled(compactLayers);
+        }
+        int bodyY = y + 52, bodyH = frame.bottom() - PAD - bodyY;
+        int left = Math.max(96, (inner - 8) * 40 / 100), right = inner - 8 - left;
+        int tabW = left / 3;
         for (int i = 0; i < 3; i++) {
-            host.showWidget(modes.get(i), x + i * (left / 3), y + 24, left / 3 - 2, 18);
+            host.showWidget(modes.get(i), x + i * tabW, y + 28, tabW, 18);
             modes.get(i).setToggled(mode == i);
         }
-        host.showWidget(list, x, y + 46, left, h - 62);
-        inspector = new Ui.Rect(x + left + 10, y + 46, right, h - 62);
-        int ix = inspector.x(), iy = inspector.y(), iw = inspector.w();
-        boolean compact = inspector.h() < 190;
-        if (compact) host.showWidget(layerMode, frame.right() - 100, y + 24, 92, 18);
-        int ph = compact ? 32 : Math.max(48, Math.min(100, inspector.h() / 3));
-        preview = new Ui.Rect(ix, iy, iw, ph);
-        if (asset == null) return;
-        int cy = preview.bottom() + 5;
-        if (!compact || !compactLayers) {
+        int caption = compact ? 0 : 12;
+        host.showWidget(list, x, bodyY + caption, left, bodyH - caption);
+        inspector = new Ui.Rect(x + left + 8, bodyY, right, bodyH);
+        int ix = inspector.x(), iy = inspector.y(), iw = inspector.w(), ih = inspector.h();
+        int applyY = inspector.bottom() - 18;
+        preview = new Ui.Rect(ix, iy, iw, 0);
+        int cy = iy;
+        if (showControls) {
+            preview = new Ui.Rect(ix, iy, iw, compact ? 34 : Math.max(52, Math.min(84, ih / 4)));
+            cy = preview.bottom() + GAP;
+            if (asset == null) return;
             if (mode == 1) {
                 host.showWidget(name.widget(), ix, cy, iw, 18);
-                host.showWidget(saveName, ix, cy + 21, (iw - 3) / 2, 18);
-                host.showWidget(resetName, ix + (iw + 3) / 2, cy + 21, (iw - 3) / 2, 18);
-                cy += 43;
+                host.showWidget(saveName, ix, cy + 22, (iw - 4) / 2, 18);
+                host.showWidget(resetName, ix + (iw + 4) / 2, cy + 22, (iw - 4) / 2, 18);
+                cy += 44;
             } else if (mode == 2) {
-                int third = (iw - 6) / 3;
+                int third = (iw - 8) / 3;
                 syncMuteButton();
                 host.showWidget(play, ix, cy, third, 18);
-                host.showWidget(stop, ix + third + 3, cy, third, 18);
-                host.showWidget(mute, ix + 2 * (third + 3), cy, third, 18);
-                host.showWidget(volume, ix, cy + 22, iw, 16);
-                host.showWidget(pitch, ix, cy + 41, iw, 16);
-                cy += 61;
+                host.showWidget(stop, ix + third + 4, cy, third, 18);
+                host.showWidget(mute, ix + 2 * (third + 4), cy, third, 18);
+                host.showWidget(volume, ix, cy + 24, iw, 18);
+                host.showWidget(pitch, ix, cy + 46, iw, 18);
+                cy += 64;
             } else {
                 host.showWidget(editFile, ix, cy, iw, 18);
-                cy += 22;
+                cy += 18;
             }
         }
-        if (!compact || compactLayers) {
-            if (compact) cy = preview.bottom() + 5;
-            host.showWidget(layers, ix, cy + 12, iw, Math.max(18, inspector.bottom() - cy - 35));
-            host.showWidget(apply, ix, inspector.bottom() - 18, iw, 18);
-            apply.active = !host.scanning() && !pack.isEmpty();
-        }
+        if (!showLayers) return;
+        int layersY = cy + (showControls ? 8 : 0);
+        host.showWidget(layers, ix, layersY + 12, iw, Math.max(18, applyY - GAP - layersY - 12));
+        host.showWidget(apply, ix, applyY, iw, 18);
+        apply.active = !host.scanning() && !pack.isEmpty();
     }
 
     public void render(GuiGraphics g, int mx, int my, float delta) {
-        Ui.bevel(g, frame, UiColors.CONTAINER, false);
-        if (subject == null) {
-            text(g, tr("browse"), frame.x() + 8, frame.y() + 31, frame.w() - 16, UiColors.INK);
-            for (int row = 0; row < rows; row++)
-                for (int col = 0; col < columns; col++) {
-                    int index = (row + scrollRow) * columns + col;
-                    var cell =
-                            new Ui.Rect(grid.x() + col * SLOT, grid.y() + row * SLOT, SLOT, SLOT);
-                    Ui.bevel(g, cell, UiColors.SLOT, true);
-                    if (index < visible.size()) {
-                        if (cell.contains(mx, my)
-                                || (index == cursor && host.focusedWidget() == null))
-                            g.fill(
-                                    cell.x() + 1,
-                                    cell.y() + 1,
-                                    cell.right() - 1,
-                                    cell.bottom() - 1,
-                                    0x60FFFFFF);
-                        g.renderItem(visible.get(index).icon(), cell.x() + 3, cell.y() + 3);
-                    }
+        Ui.frame(g, frame);
+        if (subject == null) browse(g, mx, my);
+        else detail(g);
+    }
+
+    private void browse(GuiGraphics g, int mx, int my) {
+        int x = frame.x() + PAD, y = frame.y() + PAD;
+        String total = tr("count", visible.size(), catalog == null ? 0 : catalog.subjects().size());
+        Ui.section(g, host.font(), tr("browse"), x, y + 24);
+        textRight(
+                g,
+                total,
+                frame.right() - PAD,
+                y + 26,
+                UiColors.TEXT_MUTED);
+        if (grid.w() > 0 && grid.h() > 0)
+            Ui.border(
+                    g,
+                    new Ui.Rect(grid.x() - 1, grid.y() - 1, grid.w() + 2, grid.h() + 2),
+                    UiColors.BORDER);
+        for (int row = 0; row < rows; row++)
+            for (int col = 0; col < columns; col++) {
+                int index = (row + scrollRow) * columns + col;
+                var cell = new Ui.Rect(grid.x() + col * SLOT, grid.y() + row * SLOT, SLOT, SLOT);
+                boolean hot = index < visible.size() && cell.contains(mx, my);
+                boolean current = index == cursor && host.focusedWidget() == null;
+                Ui.bevel(g, cell, hot ? UiColors.HOVER : UiColors.SLOT, true);
+                if (index >= visible.size()) continue;
+                if (hot) {
+                    g.fill(cell.x() + 1, cell.y() + 1, cell.right() - 1, cell.bottom() - 1, 0x40FFFFFF);
+                    Ui.border(g, cell, UiColors.TEXT);
+                } else if (current) {
+                    Ui.border(g, cell, UiColors.ACCENT);
                 }
-            int thumb = Math.max(12, grid.h() * rows / Math.max(rows, totalRows()));
-            Ui.bevel(g, new Ui.Rect(grid.right() + 3, grid.y(), 9, grid.h()), UiColors.SLOT, true);
-            int ty =
-                    grid.y()
-                            + (maxScroll() == 0 ? 0 : (grid.h() - thumb) * scrollRow / maxScroll());
-            Ui.bevel(
-                    g,
-                    new Ui.Rect(grid.right() + 4, ty + 1, 7, thumb - 2),
-                    UiColors.CONTAINER,
-                    false);
-            text(
-                    g,
-                    tr("count", visible.size(), catalog == null ? 0 : catalog.subjects().size()),
-                    frame.x() + 8,
-                    frame.bottom() - 25,
-                    frame.w() - 16,
-                    UiColors.INK);
-            if (visible.isEmpty())
-                text(
-                        g,
-                        host.scanning() ? tr("loading") : tr("empty"),
-                        grid.x() + 5,
-                        grid.y() + 8,
-                        grid.w() - 10,
-                        UiColors.INK);
-        } else {
-            g.renderItem(subject.icon(), frame.x() + 74, frame.y() + 8);
-            text(g, subject.name(), frame.x() + 96, frame.y() + 8, frame.w() - 104, UiColors.INK);
-            text(
-                    g,
-                    subject.id().toString(),
-                    frame.x() + 96,
-                    frame.y() + 20,
-                    frame.w() - 104,
-                    UiColors.INK);
-            Ui.bevel(g, preview, UiColors.SLOT, true);
-            if (asset == null) {
-                text(
-                        g,
-                        tr("emptySection"),
-                        preview.x() + 5,
-                        preview.y() + 8,
-                        preview.w() - 10,
-                        UiColors.INK);
-                return;
+                g.renderItem(visible.get(index).icon(), cell.x() + 3, cell.y() + 3);
             }
-            if (mode == 0 && host.preview().hasImage())
-                host.preview().render(g, preview, host.font());
+        drawGridScrollbar(g);
+        if (visible.isEmpty())
+            centered(
+                    g,
+                    host.scanning() ? tr("loading") : tr("empty"),
+                    grid,
+                    UiColors.TEXT_MUTED);
+    }
+
+    private void detail(GuiGraphics g) {
+        int x = frame.x() + PAD, y = frame.y() + PAD;
+        int right = compact ? layerMode.getX() - 8 : frame.right() - PAD;
+        var iconSlot = new Ui.Rect(x + 56, y, 20, 20);
+        Ui.bevel(g, iconSlot, UiColors.SLOT, true);
+        g.renderItem(subject.icon(), x + 58, y + 2);
+        int textX = x + 82, textW = Math.max(10, right - textX);
+        String name = Ui.trim(host.font(), subject.name(), textW);
+        g.drawString(
+                host.font(),
+                Component.literal(name).withStyle(ChatFormatting.BOLD),
+                textX,
+                y + 1,
+                UiColors.INK,
+                false);
+        text(g, subject.id().toString(), textX, y + 11, textW, UiColors.TEXT_MUTED);
+        int ruleW = Math.max(1, frame.right() - PAD - x);
+        Ui.rule(g, x, y + 22, ruleW);
+        g.fill(x, y + 22, x + Math.min(36, ruleW), y + 23, UiColors.ACCENT);
+        if (!compact)
+            Ui.section(
+                    g,
+                    host.font(),
+                    tr(assetRows.size() == 1 ? "assetCount.one" : "assetCount", assetRows.size()),
+                    x,
+                    list.getY() - 12);
+        Ui.ruleDown(g, inspector.x() - 5, inspector.y(), inspector.h());
+        if (showControls && preview.h() > 0) drawPreview(g);
+        if (showLayers)
+            Ui.section(
+                    g,
+                    host.font(),
+                    tr(mode == 0 ? "appearance.layers" : "layers", packRows.size()),
+                    layers.getX(),
+                    layers.getY() - 12);
+    }
+
+    private void drawPreview(GuiGraphics g) {
+        if (mode == 0) {
+            if (host.preview().hasImage()) host.preview().render(g, preview, host.font());
             else {
-                int yy = preview.y() + 5;
-                for (String line : rawText.split("\n")) {
-                    if (yy + 9 > preview.bottom() - 2) break;
-                    text(g, line, preview.x() + 5, yy, preview.w() - 10, UiColors.INK);
-                    yy += 11;
-                }
+                Ui.bevel(g, preview, UiColors.SLOT, true);
+                centered(g, tr("emptySection"), preview, UiColors.TEXT_MUTED);
             }
-            if (layers.visible)
-                text(
-                        g,
-                        tr(mode == 0 ? "appearance.layers" : "layers", packRows.size()),
-                        layers.getX(),
-                        layers.getY() - 11,
-                        layers.getWidth(),
-                        UiColors.INK);
+            return;
         }
+        Ui.bevel(g, preview, UiColors.SLOT, true);
+        if (mode == 1) {
+            centered(g, rawText.isEmpty() ? tr("emptySection") : rawText, preview, UiColors.INK);
+            return;
+        }
+        String event = event();
+        g.drawString(
+                host.font(),
+                Component.literal(Ui.trim(host.font(), event, preview.w() - 12)).withStyle(ChatFormatting.BOLD),
+                preview.x() + 6,
+                preview.y() + 6,
+                UiColors.INK,
+                false);
+        text(g, tr("audio.selected"), preview.x() + 6, preview.y() + 18, preview.w() - 12, UiColors.TEXT_MUTED);
+    }
+
+    private void drawGridScrollbar(GuiGraphics g) {
+        int trackX = grid.right() + 3;
+        var track = new Ui.Rect(trackX, grid.y(), 9, grid.h());
+        Ui.bevel(g, track, UiColors.SLOT, true);
+        int thumb = Math.max(12, grid.h() * rows / Math.max(rows, totalRows()));
+        int ty = grid.y() + (maxScroll() == 0 ? 0 : (grid.h() - thumb) * scrollRow / maxScroll());
+        Ui.bevel(g, new Ui.Rect(trackX + 1, ty + 1, 7, Math.max(2, thumb - 2)), UiColors.CONTROL, false);
+    }
+
+    private void textRight(GuiGraphics g, String s, int right, int y, int color) {
+        g.drawString(host.font(), s, right - host.font().width(s), y, color, false);
+    }
+
+    private void centered(GuiGraphics g, String s, Ui.Rect box, int color) {
+        String line = Ui.trim(host.font(), s, box.w() - 8);
+        g.drawString(
+                host.font(),
+                line,
+                box.x() + (box.w() - host.font().width(line)) / 2,
+                box.y() + (box.h() - 8) / 2,
+                color,
+                false);
     }
 
     private void text(GuiGraphics g, String s, int x, int y, int w, int color) {
@@ -695,7 +759,7 @@ public final class InventoryPage {
     }
 
     public void refreshSearch() {
-        query = "\0";
+        searchDirty = true;
     }
 
     public String statusText() {
@@ -730,10 +794,6 @@ public final class InventoryPage {
         return layers;
     }
 
-    public ScrollList assetList() {
-        return list;
-    }
-
     public List<String> layerPacks() {
         return packRows;
     }
@@ -742,21 +802,13 @@ public final class InventoryPage {
         return pack;
     }
 
-    public String previewSource() {
-        return previewSource;
-    }
-
     public long previewLoads() {
         return previewLoads;
     }
 
-    public AppearanceLayers appearanceLayers() {
-        return appearance;
-    }
-
     private final class AssetList extends ScrollList {
         AssetList() {
-            super(host.font(), 0, 0, 1, 1, 24);
+            super(host.font(), 0, 0, 1, 1, 20);
         }
 
         protected int rowCount() {
@@ -773,20 +825,12 @@ public final class InventoryPage {
 
         protected void renderRow(
                 GuiGraphics g, int i, Ui.Rect r, boolean hovered, boolean selected) {
-            Ui.bevel(
-                    g,
-                    r,
-                    selected ? UiColors.SELECTED : hovered ? UiColors.HOVER : UiColors.SLOT,
-                    true);
+            var row = new Ui.Rect(r.x() + 1, r.y(), r.w() - 3, r.h() - 2);
+            Ui.bevel(g, row, selected ? UiColors.SELECTED : hovered ? UiColors.HOVER : UiColors.SLOT, true);
+            if (selected) Ui.border(g, row, UiColors.BORDER_STRONG);
             Asset a = assetRows.get(i);
             String label = a.group() == Group.NAME ? tr("mode.1") : a.label();
-            text(
-                    g,
-                    label,
-                    r.x() + 4,
-                    r.y() + 8,
-                    r.w() - 8,
-                    selected ? UiColors.TEXT : UiColors.INK);
+            text(g, label, row.x() + 4, row.y() + 5, row.w() - 8, selected ? UiColors.TEXT : UiColors.INK);
         }
 
         public String tooltipAt(int i) {

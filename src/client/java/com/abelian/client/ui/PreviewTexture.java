@@ -33,7 +33,6 @@ public final class PreviewTexture {
     private DynamicTexture texture;
     private int sourceWidth;
     private int sourceHeight;
-    private String message = "";
 
     /**
      * Replaces the thumbnail with the pixels of one file; returns false when nothing could be read.
@@ -43,12 +42,10 @@ public final class PreviewTexture {
      * the file it just asked for.
      */
     public boolean show(IoSupplier<InputStream> supplier) {
-        this.message = "";
         this.sourceWidth = 0;
         this.sourceHeight = 0;
         NativeImage image = read(supplier);
         if (image == null) {
-            this.message = "no preview";
             return false;
         }
         int width = image.getWidth();
@@ -79,7 +76,6 @@ public final class PreviewTexture {
             // NativeImage#close is idempotent, so closing it here is safe either way.
             image.close();
             release();
-            this.message = "no preview";
             return false;
         }
         this.sourceWidth = width;
@@ -93,7 +89,6 @@ public final class PreviewTexture {
     public void clear() {
         this.sourceWidth = 0;
         this.sourceHeight = 0;
-        this.message = "";
     }
 
     /**
@@ -109,7 +104,6 @@ public final class PreviewTexture {
         this.texture = null;
         this.sourceWidth = 0;
         this.sourceHeight = 0;
-        this.message = "";
         if (current == null) {
             return;
         }
@@ -129,29 +123,6 @@ public final class PreviewTexture {
                 && this.sourceWidth > 0 && this.sourceHeight > 0;
     }
 
-    public int sourceWidth() {
-        return this.sourceWidth;
-    }
-
-    public int sourceHeight() {
-        return this.sourceHeight;
-    }
-
-    public String message() {
-        return this.message;
-    }
-
-    /**
-     * Draws the thumbnail centred in the box, scaling pixel art by whole factors whenever possible.
-     *
-     * <p>Kept for the existing callers; it falls back to the global font, which is exactly what
-     * {@link #render(GuiGraphics, Ui.Rect, Font)} avoids. New code should pass the font it already has.
-     */
-    public void render(GuiGraphics graphics, Ui.Rect box) {
-        Minecraft minecraft = Minecraft.getInstance();
-        render(graphics, box, minecraft == null ? null : minecraft.font);
-    }
-
     /**
      * Draws the thumbnail centred in the box, scaling pixel art by whole factors whenever possible.
      *
@@ -160,15 +131,6 @@ public final class PreviewTexture {
      */
     public void render(GuiGraphics graphics, Ui.Rect box, Font font) {
         Ui.bevel(graphics, box, UiColors.SLOT, true);
-        Font textFont = font != null ? font : fallbackFont();
-        if (!hasImage()) {
-            if (textFont != null) {
-                String text = this.message.isEmpty() ? "no preview" : this.message;
-                graphics.drawString(textFont, text, box.x() + (box.w() - textFont.width(text)) / 2,
-                        box.y() + (box.h() - 8) / 2, UiColors.TEXT_MUTED, false);
-            }
-            return;
-        }
         int innerWidth = Math.max(1, box.w() - 6);
         int innerHeight = Math.max(1, box.h() - 6);
         int drawWidth;
@@ -188,11 +150,6 @@ public final class PreviewTexture {
         int y = box.y() + (box.h() - drawHeight) / 2;
         graphics.blit(RenderType::guiTextured, ID, x, y, 0.0F, 0.0F, drawWidth, drawHeight,
                 this.sourceWidth, this.sourceHeight, this.sourceWidth, this.sourceHeight);
-    }
-
-    private static Font fallbackFont() {
-        Minecraft minecraft = Minecraft.getInstance();
-        return minecraft == null ? null : minecraft.font;
     }
 
     private static NativeImage read(IoSupplier<InputStream> supplier) {

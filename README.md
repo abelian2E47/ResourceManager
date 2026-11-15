@@ -21,8 +21,7 @@ text change immediately; **Reset name** puts the original back. Only that object
 overridden — no language file is edited.
 
 **Sound.** The events that belong to the object. Choose a pack layer, **Play** to hear exactly the bytes
-that layer ships, **Stop** to release the player, **Mute** to silence the event in the game and in the
-preview, and set volume (0–16) and pitch (0.5–2), which are multiplied into real in-game playback. The
+that layer ships, **Stop** to release the player, **Mute** to silence the event in the game, and set volume (0–16) and pitch (0.5–2), which are multiplied into real in-game playback. The
 pitch range is exactly the one vanilla lets through; volume is a multiplier applied before vanilla clamps
 the total to 1, so its top end lifts events a pack registered quieter than full volume. Each event keeps
 its own layer, independently of the visual layer and of the other events.
@@ -31,7 +30,7 @@ its own layer, independently of the visual layer and of the other events.
 
 Selecting an object lists the packs that actually provide part of it. Clicking a row only previews;
 **Use this layer** applies the choice and reloads resources in one step. The layer the game is using now
-is marked with `*`.
+carries a green bar at its left edge.
 
 - Visuals switch as a whole, so a model can never end up drawn with another pack's texture.
 - Sounds switch per event, so retuning one event does not rewrite the rest of a `sounds.json`.
@@ -95,7 +94,7 @@ $env:RESOURCEMANAGER_INVENTORY_VERIFY='1'
 .\gradlew.bat --offline runClient
 ```
 
-The last run reported **43 PASS / 0 FAIL**: [docs/inventory-verify-report.txt](docs/inventory-verify-report.txt).
+The last run reported **55 PASS / 0 FAIL**: [docs/inventory-verify-report.txt](docs/inventory-verify-report.txt).
 
 Deeper reading: [usage and verification](docs/INVENTORY.md) · [architecture](docs/ARCHITECTURE.md) · [中文说明](README.zh_cn.md)
 

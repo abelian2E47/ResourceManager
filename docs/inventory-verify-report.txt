@@ -25,11 +25,11 @@ PASS: Sound pitch changes through real input
 PASS: Pitch slider starts at the lowest pitch the game plays: 0.5
 PASS: Pitch slider stops at the highest pitch the game plays: 2.0
 PASS: Pitch outside 0.5-2 is clamped to what the game plays
-PASS: Game playback multiplies volume by 1.78281 (1.0 -> 1.78281)
-PASS: Game playback multiplies pitch by 1.231317 (1.0 -> 1.231317)
+PASS: Game playback multiplies volume by 1.914298 (1.0 -> 1.914298)
+PASS: Game playback multiplies pitch by 1.263158 (1.0 -> 1.263158)
 PASS: Mute button writes volume 0
 PASS: Muted event reaches the game at volume 0
-PASS: Unmute restores the level before muting: 1.78281
+PASS: Unmute restores the level before muting: 1.914298
 PASS: Sound tuning survives a config round trip
 PASS: Audio-only pack is available without a sound definition
 PASS: Reload preserves the selected non-first sound event

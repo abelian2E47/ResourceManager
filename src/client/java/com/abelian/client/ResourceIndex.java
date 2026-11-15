@@ -111,9 +111,5 @@ public final class ResourceIndex {
         public List<ResourceNode> allFiles() {
             return files;
         }
-
-        public int fileCount() {
-            return providers.size();
-        }
     }
 }

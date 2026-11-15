@@ -1,0 +1,142 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-15T11:05:00+08:00",
+  "title": "Design System: ResourceManager",
+  "extensions": {
+    "colorMeta": {
+      "chrome": { "role": "neutral-dark", "displayName": "外框深灰" },
+      "chrome-well": { "role": "neutral-dark", "displayName": "外框凹槽" },
+      "container": { "role": "neutral", "displayName": "原版容器灰" },
+      "slot": { "role": "neutral", "displayName": "凹槽灰" },
+      "accent": { "role": "accent", "displayName": "强调绿" },
+      "selected": { "role": "accent-dark", "displayName": "选中深绿" }
+    },
+    "typographyMeta": {
+      "body": {
+        "displayName": "Minecraft 游戏字体",
+        "purpose": "客户端 Font；粗体只用于页面名与区块标题、选中页签。浏览器示例无法代替游戏字体。"
+      }
+    },
+    "breakpoints": [
+      {
+        "name": "inventory-detail-compact",
+        "value": "inspector.h() < 190 GUI px (frame.h() < 252 GUI px)",
+        "purpose": "切换预览操作与覆盖层"
+      }
+    ],
+    "nativeDrawing": {
+      "platform": "Minecraft 1.21.4 Fabric native Screen",
+      "units": "GUI px; game GUI Scale applies",
+      "source": "src/client/java/com/abelian/client/ui/Ui.java",
+      "surfaces": {
+        "chrome": "Ui.chrome: 顶部 30px 与底部 24px 深色条，1px 亮顶边 + 1px 暗底边",
+        "panel": "Ui.frame: 2px 投影 + 1px 深描边 + 1px 明暗硬边 + 容器填充",
+        "well": "Ui.bevel(..., inset): 贴图预览、滚动槽、输入框"
+      },
+      "bevel": {
+        "edgeWidth": 1,
+        "raised": { "topLeft": "{colors.bevel-light}", "bottomRight": "{colors.bevel-dark}" },
+        "inset": { "topLeft": "{colors.bevel-dark}", "bottomRight": "{colors.bevel-light}" }
+      },
+      "grid": {
+        "columns": "max(1,min(18,(frame.w()-34)/22))",
+        "rows": "max(1, (frame.h() - 75) / 22); integer division",
+        "iconSize": "16 GUI px",
+        "iconInset": "3 GUI px",
+        "hover": "单元格填充 hover 灰 + 0x40FFFFFF 白罩 + 1px 白框",
+        "cursor": "焦点不在控件上时，键盘光标格用 1px 强调绿框"
+      },
+      "scope": "单一物品栏流程，深色外框 + 浅灰内容面 + 单一强调色",
+      "snippetLimit": "下列 HTML/CSS 是隔离面板中的展示近似。字体使用浏览器 monospace，不是 Minecraft 渲染或验证证据。"
+    },
+    "shadows": [
+      { "name": "panel-drop", "value": "2px 偏移, 0x3A000000", "purpose": "内容面板浮在世界之上" }
+    ],
+    "motion": []
+  },
+  "components": [
+    {
+      "name": "外框按钮",
+      "kind": "button",
+      "refersTo": "chrome-raised",
+      "description": "顶部工具栏的重载与关闭；深色凸起，悬停加亮。",
+      "html": "<button class=\"ds-chrome\">Reload packs</button>",
+      "css": ".ds-chrome{height:18px;padding:0 6px;background:#3a4048;color:#e8eaed;border:1px solid;border-color:#4a515b #1b1e23 #1b1e23 #4a515b;border-radius:0;font:9px monospace;cursor:pointer}.ds-chrome:hover{background:#4a515b;outline:1px solid #e8eaed;outline-offset:-1px}.ds-chrome:active{background:#31373e}"
+    },
+    {
+      "name": "主操作按钮",
+      "kind": "button",
+      "refersTo": "accent",
+      "description": "“游戏使用此层”；整屏最多一个填绿按钮。",
+      "html": "<button class=\"ds-primary\">Use this layer</button>",
+      "css": ".ds-primary{height:18px;padding:0 6px;background:#2e7d4f;color:#fff;border:1px solid;border-color:#3a9660 #255f3d #255f3d #3a9660;border-radius:0;font:9px monospace;cursor:pointer}.ds-primary:hover{background:#3a9660;outline:1px solid #fff;outline-offset:-1px}"
+    },
+    {
+      "name": "页签",
+      "kind": "button",
+      "refersTo": "accent",
+      "description": "分类与任务页签；选中填强调绿、文字加粗、外框加深。",
+      "html": "<button class=\"ds-tab\" aria-pressed=\"true\">Visuals</button>",
+      "css": ".ds-tab{height:18px;padding:0 6px;background:#2e7d4f;color:#fff;font:bold 9px monospace;border:1px solid #255f3d;border-radius:0;cursor:pointer}.ds-tab[aria-pressed=\"false\"]{background:#7a7a7a;color:#fff;font-weight:normal;border-color:#fff #555 #555 #fff}.ds-tab[aria-pressed=\"false\"]:hover{background:#8e8e8e;outline:1px solid #fff;outline-offset:-1px}"
+    },
+    {
+      "name": "面板按钮",
+      "kind": "button",
+      "refersTo": "control",
+      "description": "浅灰面上的常规操作；悬停加亮并加白框。",
+      "html": "<button class=\"ds-button\">Edit a local copy</button>",
+      "css": ".ds-button{height:18px;min-width:88px;padding:0 6px;background:#7a7a7a;color:#fff;border:1px solid;border-color:#fff #555 #555 #fff;border-radius:0;font:9px monospace;cursor:pointer}.ds-button:hover,.ds-button:focus-visible{background:#8e8e8e;outline:1px solid #fff;outline-offset:-1px}.ds-button:active{background:#6a6a6a}"
+    },
+    {
+      "name": "深色输入框",
+      "kind": "input",
+      "refersTo": "chrome-well",
+      "description": "工具栏搜索框；深色凹槽配浅色文字，聚焦一圈浅绿描边。",
+      "html": "<input class=\"ds-field\" aria-label=\"搜索\" placeholder=\"Search items / creatures by name or ID…\">",
+      "css": ".ds-field{height:18px;width:260px;padding:0 4px;background:#23272d;color:#e8eaed;border:1px solid;border-color:#1b1e23 #4a515b #4a515b #1b1e23;border-radius:0;font:9px monospace}.ds-field::placeholder{color:#98a0aa}.ds-field:focus-visible{border-color:#7fd3a0;outline:none}"
+    },
+    {
+      "name": "灰色输入框",
+      "kind": "input",
+      "refersTo": "slot",
+      "description": "名称编辑器的原版灰色凹槽。",
+      "html": "<input class=\"ds-field-light\" aria-label=\"名称\" value=\"Diamond Sword\">",
+      "css": ".ds-field-light{height:18px;width:240px;padding:0 4px;background:#8b8b8b;color:#1c1c1c;border:1px solid;border-color:#373737 #fff #fff #373737;border-radius:0;font:9px monospace}.ds-field-light:focus-visible{border-color:#7fd3a0;outline:none}"
+    },
+    {
+      "name": "空对象槽",
+      "kind": "custom",
+      "refersTo": "inventory-cell",
+      "description": "22 GUI px 凹槽；真实 16px 图标由游戏 renderItem 绘制在 +3,+3。",
+      "html": "<button class=\"ds-cell\" aria-label=\"空对象槽\"></button>",
+      "css": ".ds-cell{display:block;width:22px;height:22px;padding:0;background:#8b8b8b;border:1px solid;border-color:#373737 #fff #fff #373737;border-radius:0}.ds-cell:hover{background:#b2b2b2;outline:1px solid #fff;outline-offset:-1px}"
+    },
+    {
+      "name": "层行",
+      "kind": "custom",
+      "refersTo": "layer-row",
+      "description": "资源包层列表：默认凹槽灰、悬停加亮、选中深绿白字白框；游戏正在使用的一层左端有竖条。",
+      "html": "<div class=\"ds-row\" aria-selected=\"true\">RM-Verify-Model</div>",
+      "css": ".ds-row{height:16px;margin:0 2px 2px 0;padding:0 4px;background:#2f5842;color:#fff;border:1px solid #fff;box-shadow:inset 2px 0 0 #7fd3a0;font:9px/16px monospace}.ds-row[aria-selected=\"false\"]{background:#8b8b8b;color:#1c1c1c;border-color:#373737 #fff #fff #373737;box-shadow:none}.ds-row[aria-selected=\"false\"]:hover{background:#b2b2b2}"
+    },
+    {
+      "name": "状态栏",
+      "kind": "custom",
+      "refersTo": "chrome",
+      "description": "底部 24px 深色条，左侧 2×10 浅绿刻度标识状态来源。",
+      "html": "<footer class=\"ds-status\">Scroll to browse · Click to open · Ctrl+F to search</footer>",
+      "css": ".ds-status{height:24px;padding:0 12px;background:#2b2f36;color:#e8eaed;border-top:1px solid #4a515b;border-bottom:1px solid #1b1e23;box-shadow:inset 2px 0 0 #7fd3a0;font:9px/24px monospace}"
+    }
+  ],
+  "narrative": {
+    "northStar": "深色外框里的原版物品栏",
+    "overview": "单一对象网格入口，外观、名称、音效三种任务；深色外框区分界面归属，浅灰内容面承载真实图标，绿色只标选中与主操作。",
+    "keyCharacteristics": [
+      "真实 ItemStack 图标",
+      "按对象整组切换外观",
+      "名称与声音独立",
+      "小窗口切换预览和覆盖层",
+      "一个强调色，一个填绿主按钮"
+    ]
+  }
+}

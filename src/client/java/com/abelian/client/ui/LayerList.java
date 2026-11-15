@@ -8,6 +8,8 @@ import java.util.function.Consumer;
 
 /** A pack picker: selection previews; the explicit Apply button changes the game. */
 public final class LayerList extends ScrollList {
+    private static final int ROW_GAP = 2;
+
     private List<String> packs = List.of();
     private String selected = "", applied = "";
     private final Consumer<String> select;
@@ -21,10 +23,6 @@ public final class LayerList extends ScrollList {
         this.packs = packs;
         this.selected = selected;
         this.applied = applied;
-    }
-
-    public int layerCount() {
-        return packs.size();
     }
 
     public String layerAt(int index) {
@@ -48,14 +46,22 @@ public final class LayerList extends ScrollList {
     }
 
     protected void renderRow(GuiGraphics g, int i, Ui.Rect r, boolean hover, boolean selected) {
-        Ui.bevel(g, r, selected ? UiColors.SELECTED : hover ? UiColors.HOVER : UiColors.SLOT, true);
+        var row = new Ui.Rect(r.x() + 1, r.y(), r.w() - ROW_GAP - 1, r.h() - ROW_GAP);
+        Ui.bevel(g, row, selected ? UiColors.SELECTED : hover ? UiColors.HOVER : UiColors.SLOT, true);
+        if (selected) Ui.border(g, row, UiColors.BORDER_STRONG);
         String id = packs.get(i);
-        String label = (id.equals(applied) ? "* " : "") + id;
+        boolean applied = id.equals(this.applied);
+        int textX = row.x() + 4;
+        if (applied) {
+            g.fill(textX, row.y() + 3, textX + 2, row.bottom() - 3,
+                    selected ? UiColors.ACCENT_LIGHT : UiColors.ACCENT);
+            textX += 5;
+        }
         g.drawString(
                 font(),
-                Ui.trim(font(), label, r.w() - 8),
-                r.x() + 4,
-                r.y() + 6,
+                Ui.trim(font(), id, row.right() - 4 - textX),
+                textX,
+                row.y() + (row.h() - 8) / 2,
                 selected ? UiColors.TEXT : UiColors.INK,
                 false);
     }

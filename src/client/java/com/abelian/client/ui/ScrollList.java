@@ -12,10 +12,10 @@ import net.minecraft.network.chat.Component;
  * row hit testing. Subclasses only describe their rows.
  */
 public abstract class ScrollList extends AbstractWidget implements DragTarget {
-    protected static final int SCROLLBAR_WIDTH = 6;
+    private static final int SCROLLBAR_WIDTH = 7;
 
     private final Font font;
-    private int rowHeight;
+    private final int rowHeight;
     protected double scroll;
     private boolean draggingThumb;
     private int hoveredRow = -1;
@@ -23,7 +23,7 @@ public abstract class ScrollList extends AbstractWidget implements DragTarget {
     protected ScrollList(Font font, int x, int y, int width, int height, int rowHeight) {
         super(x, y, width, height, Component.empty());
         this.font = font;
-        this.rowHeight = rowHeight;
+        this.rowHeight = Math.max(1, rowHeight);
     }
 
     protected Font font() {
@@ -48,22 +48,6 @@ public abstract class ScrollList extends AbstractWidget implements DragTarget {
         return this.hoveredRow;
     }
 
-    public int rowHeightValue() {
-        return this.rowHeight;
-    }
-
-    /**
-     * Changes the height of every row after construction and re-clamps the scroll offset.
-     *
-     * <p>Additive: the original lists fix their row height in the constructor, but a list whose rows
-     * carry a variable amount of content (two text lines when there is room, one when there is not)
-     * has to be able to switch geometry when the page is laid out again.
-     */
-    public void setRowHeightValue(int height) {
-        this.rowHeight = Math.max(1, height);
-        clampScroll();
-    }
-
     protected int contentHeight() {
         return rowCount() * this.rowHeight;
     }
@@ -72,7 +56,7 @@ public abstract class ScrollList extends AbstractWidget implements DragTarget {
         return Math.max(0, contentHeight() - getHeight());
     }
 
-    public boolean scrollbarVisible() {
+    private boolean scrollbarVisible() {
         return contentHeight() > getHeight() && rowCount() > 0;
     }
 
@@ -89,27 +73,8 @@ public abstract class ScrollList extends AbstractWidget implements DragTarget {
         return index >= 0 && index < rowCount() ? index : -1;
     }
 
-    public void clampScroll() {
+    private void clampScroll() {
         this.scroll = Ui.clamp(this.scroll, 0, maxScroll());
-    }
-
-    /** Scrolls so that the given row is fully visible. */
-    public void scrollToRow(int index) {
-        if (index < 0) {
-            return;
-        }
-        int top = rowTop(index);
-        if (top < getY()) {
-            this.scroll = Ui.clamp(this.scroll + (top - getY()), 0, maxScroll());
-        } else if (top + this.rowHeight > getBottom()) {
-            this.scroll = Ui.clamp(this.scroll + (top + this.rowHeight - getBottom()), 0, maxScroll());
-        }
-        clampScroll();
-    }
-
-    /** Visible coordinates of a row, after scroll and layout. */
-    public Ui.Rect rowBounds(int index) {
-        return new Ui.Rect(getX(), rowTop(index), Math.max(1, listRight() - getX()), rowHeightValue());
     }
 
     public void resetScroll() {
@@ -156,13 +121,14 @@ public abstract class ScrollList extends AbstractWidget implements DragTarget {
 
     private void drawScrollbar(GuiGraphics graphics, int mouseX, int mouseY) {
         int left = scrollbarLeft();
-        graphics.fill(left, getY(), left + SCROLLBAR_WIDTH - 1, getBottom(), Ui.SCROLL_TRACK);
+        var track = new Ui.Rect(left, getY(), SCROLLBAR_WIDTH, getHeight());
+        Ui.bevel(graphics, track, UiColors.SLOT, true);
         int thumbHeight = thumbHeight();
         int thumbTop = thumbTop(thumbHeight);
         boolean hovered = this.draggingThumb
                 || (mouseX >= left && mouseY >= thumbTop && mouseY < thumbTop + thumbHeight);
-        graphics.fill(left, thumbTop, left + SCROLLBAR_WIDTH - 1, thumbTop + thumbHeight,
-                hovered ? Ui.SCROLL_THUMB_HOVER : Ui.SCROLL_THUMB);
+        var thumb = new Ui.Rect(left + 1, thumbTop + 1, SCROLLBAR_WIDTH - 2, Math.max(2, thumbHeight - 2));
+        Ui.bevel(graphics, thumb, hovered ? UiColors.ACCENT : UiColors.HANDLE, false);
     }
 
     private void setScrollFromMouse(double mouseY) {

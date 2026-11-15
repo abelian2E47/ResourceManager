@@ -7,37 +7,28 @@ import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.network.chat.Component;
 
 /**
- * The dark single line text input used by every page.
+ * The sunken single line text input used by the toolbar and the name editor.
  *
- * <p>It wraps a vanilla {@link EditBox} instead of extending it: the screen has to register the inner
- * widget to get real focus, cursor and drag behaviour, while the page still wants the panel look and a
- * place to park the hint. Drawing is split accordingly - this class paints the sunken well and the
- * border, then delegates the text and cursor to the widget, which keeps Minecraft's own editing
- * behaviour intact (a hand rolled field would have to reimplement it badly).
- *
- * <pre>{@code
- * this.filter = new UiField(font, 64, this::onFilterChanged, "Filter resources");
- * host.add(this.filter.widget());
- *
- * public void layout() {
- *     Ui.Rect body = this.box.body();
- *     this.filter.place(body.x(), body.y(), body.w(), UiMetrics.FIELD_H);
- * }
- *
- * public void render(GuiGraphics graphics, ...) {
- *     this.filter.render(graphics);
- * }
- * }</pre>
+ * <p>It wraps a vanilla {@link EditBox} instead of extending it: the screen registers the inner widget
+ * so it gets real focus, caret and drag behaviour, while this class paints the well and the hint. An
+ * unbordered EditBox draws its text at the top of its own box, so {@link #render} shifts the pose down
+ * by half the leftover height; that keeps the text vertically centred without moving the hit area.
  */
 public final class UiField {
+    /** Standard field height; the well is one pixel larger than the text line. */
+    public static final int HEIGHT = 18;
+
+    private static final int TEXT_HEIGHT = 8;
+
     private final Font font;
     private final EditBox widget;
-    private String hint;
+    private final String hint;
+    private boolean chrome;
 
     /** Creates the field; it starts hidden so the screen decides where it goes on the first layout. */
     public UiField(Font font, int maxLength, Consumer<String> responder, String hint) {
         this.font = font;
-        this.widget = new EditBox(font, 0, 0, 1, UiMetrics.FIELD_H, Component.empty());
+        this.widget = new EditBox(font, 0, 0, 1, HEIGHT, Component.empty());
         this.widget.setMaxLength(Math.max(1, maxLength));
         this.widget.setBordered(false);
         this.widget.setTextColor(UiColors.INK);
@@ -50,6 +41,14 @@ public final class UiField {
         this.hint = hint;
         // No setSuggestion here: render() paints the hint itself, and the widget's own suggestion
         // would be drawn on top of it, leaving two overlapping copies of the same text.
+    }
+
+    /** True for the toolbar field: dark well with light ink instead of the vanilla grey. */
+    public UiField setChrome(boolean value) {
+        chrome = value;
+        this.widget.setTextColor(value ? UiColors.CHROME_TEXT : UiColors.INK);
+        this.widget.setTextColorUneditable(value ? UiColors.CHROME_MUTED : UiColors.TEXT_OFF);
+        return this;
     }
 
     /** The vanilla widget the screen has to register and forward focus to. */
@@ -77,7 +76,7 @@ public final class UiField {
         this.widget.setVisible(true);
     }
 
-    /** Paints the sunken fill, the border and the hint, then the widget's own text and cursor. */
+    /** Paints the well, the hint and the widget's own text and caret. */
     public void render(GuiGraphics graphics) {
         if (!this.widget.isVisible()) {
             return;
@@ -89,26 +88,32 @@ public final class UiField {
         if (width <= 0 || height <= 0) {
             return;
         }
-        boolean focused = this.widget.isFocused();
-        int border = focused ? UiColors.BORDER_STRONG : UiColors.BORDER;
-        Ui.panel(graphics, new Ui.Rect(x, y, width, height), UiColors.SUNKEN, border);
-        if (this.widget.isActive() && !focused && this.widget.getValue().isEmpty() && this.hint != null
-                && !this.hint.isEmpty()) {
-            int room = Math.max(0, width - 8);
-            graphics.drawString(this.font, Ui.trim(this.font, this.hint, room), x + 4, y + (height - 8) / 2,
-                    UiColors.TEXT_MUTED, false);
+        var box = new Ui.Rect(x, y, width, height);
+        if (this.chrome) {
+            Ui.bevelStyled(graphics, box, UiColors.CHROME_WELL,
+                    UiColors.CHROME_EDGE_DARK, UiColors.CHROME_EDGE_LIGHT);
+        } else {
+            Ui.bevel(graphics, box, UiColors.SLOT, true);
         }
+        if (this.widget.isFocused()) {
+            Ui.border(graphics, box, UiColors.ACCENT_LIGHT);
+        }
+        if (this.widget.getValue().isEmpty() && this.hint != null && !this.hint.isEmpty()) {
+            int room = Math.max(0, width - 8);
+            graphics.drawString(
+                    this.font,
+                    Ui.trim(this.font, this.hint, room),
+                    x + 4,
+                    y + (height - TEXT_HEIGHT) / 2,
+                    this.chrome ? UiColors.CHROME_MUTED : UiColors.TEXT_MUTED,
+                    false);
+        }
+        // An unbordered EditBox draws its text at the top of its own box, so the pose is shifted
+        // down by the leftover half height; that centres the text without moving the hit area.
+        int shift = Math.max(0, (height - TEXT_HEIGHT) / 2);
+        graphics.pose().pushPose();
+        graphics.pose().translate(0.0F, shift, 0.0F);
         this.widget.render(graphics, 0, 0, 0.0F);
-    }
-
-    /** Replaces the hint shown while the field is empty and unfocused. */
-    public void setHint(String hint) {
-        this.hint = hint;
-    }
-
-    /** Enables or disables the field; a disabled field draws muted and ignores clicks. */
-    public void setActive(boolean active) {
-        this.widget.active = active;
-        this.widget.setEditable(active);
+        graphics.pose().popPose();
     }
 }

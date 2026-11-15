@@ -49,9 +49,10 @@ public final class ResourceManagerScreen extends Screen {
                     addField(
                             Component.translatable("resourcemanager.inventory.search").getString(),
                             96,
-                            this::setSearchQuery);
-            reload = addButton("resourcemanager.ui.reload", this::reloadPacks);
-            close = addButton("resourcemanager.ui.close", this::onClose);
+                            this::setSearchQuery)
+                            .setChrome(true);
+            reload = addButton("resourcemanager.ui.reload", this::reloadPacks).setStyle(UiButton.Style.CHROME);
+            close = addButton("resourcemanager.ui.close", this::onClose).setStyle(UiButton.Style.CHROME);
             inventory = new InventoryPage(this);
             inventory.createWidgets();
         }
@@ -174,7 +175,7 @@ public final class ResourceManagerScreen extends Screen {
     }
 
     public Ui.Rect contentRect() {
-        return new Ui.Rect(8, 36, width - 16, Math.max(80, height - 62));
+        return new Ui.Rect(8, 34, width - 16, Math.max(80, height - 60));
     }
 
     public void setSearchQuery(String value) {
@@ -200,10 +201,6 @@ public final class ResourceManagerScreen extends Screen {
 
     public void applySoundTuning(String event, SoundTuning tuning) {
         config.setSoundTuning(event, tuning);
-        changed();
-    }
-
-    public void saveSoundTuning(String event) {
         changed();
     }
 
@@ -244,9 +241,9 @@ public final class ResourceManagerScreen extends Screen {
     }
 
     private void layout() {
-        showWidget(search.widget(), 8, 8, Math.max(40, width - 134), 18);
-        showWidget(reload, width - 120, 8, 72, 18);
-        showWidget(close, width - 44, 8, 36, 18);
+        showWidget(search.widget(), 8, 6, Math.max(40, width - 132), 18);
+        showWidget(reload, width - 122, 6, 74, 18);
+        showWidget(close, width - 44, 6, 36, 18);
         reload.active = !scanning;
         inventory.layout();
         if (getFocused() instanceof AbstractWidget widget && !widget.visible) setFocused(null);
@@ -262,7 +259,7 @@ public final class ResourceManagerScreen extends Screen {
     public void render(GuiGraphics g, int mx, int my, float delta) {
         layout();
         renderBackground(g, mx, my, delta);
-        Ui.bevel(g, new Ui.Rect(0, 0, width, 32), UiColors.CONTAINER, false);
+        Ui.chrome(g, new Ui.Rect(0, 0, width, 30));
         inventory.render(g, mx, my, delta);
         for (AbstractWidget widget : widgets) {
             if (!widget.visible) continue;
@@ -270,13 +267,14 @@ public final class ResourceManagerScreen extends Screen {
             if (field != null) field.render(g);
             else widget.render(g, mx, my, delta);
         }
-        Ui.bevel(g, new Ui.Rect(8, height - 22, width - 16, 14), UiColors.CONTAINER, true);
+        Ui.chrome(g, new Ui.Rect(0, height - 24, width, 24));
+        g.fill(13, height - 17, 15, height - 7, UiColors.ACCENT_LIGHT);
         g.drawString(
                 font,
-                Ui.trim(font, displayedStatus(), width - 26),
-                13,
-                height - 19,
-                UiColors.INK,
+                Ui.trim(font, displayedStatus(), width - 30),
+                21,
+                height - 16,
+                UiColors.CHROME_TEXT,
                 false);
         String tooltip = inventory.tooltip(mx, my);
         if (tooltip == null)
