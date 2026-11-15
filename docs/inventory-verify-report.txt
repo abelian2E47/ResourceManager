@@ -8,10 +8,15 @@ PASS: Hidden model remains in visual dependency graph
 PASS: Plain item does not show block textures
 PASS: Texture preview decodes real bytes
 PASS: Appearance layers include model-only and texture-only packs
+PASS: Applying a layer stages it instead of reloading
+PASS: Staging a layer does not reload the packs
+PASS: Apply clears the staged batch
 PASS: Texture-only layer provides selected texture after reload
 PASS: Model falls back to bundled asset instead of another user pack
 PASS: Appearance choice persists after reload
 PASS: 100 unchanged layouts do not decode another preview
+PASS: Two applied layers wait for one shared reload
+PASS: A batch of edits costs a single reload
 PASS: Model-only pack supplies model after group switch
 PASS: Group switch excludes texture from previous user pack
 PASS: Name is one entry instead of every language file
@@ -53,3 +58,6 @@ PASS: Local edit pack contains the complete model and texture group
 PASS: Editing binds the whole appearance to its local pack
 PASS: Animation metadata follows its image provider
 PASS: Grouped local edits become the live provider after reload
+PASS: Visuals mode offers at least one layer to stage
+PASS: A staged edit waits for the batch Apply button
+PASS: Confirm reloads the packs exactly once

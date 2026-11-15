@@ -164,8 +164,13 @@ public final class InventoryVerify {
                     check(
                             page.layerPacks().containsAll(List.of(PACK_A, PACK_B)),
                             "Appearance layers include model-only and texture-only packs");
+                    int stagedFrom = gui.reloads();
                     page.selectLayer(PACK_B);
                     page.applyLayer();
+                    check(gui.pendingEdits() == 1, "Applying a layer stages it instead of reloading");
+                    check(gui.reloads() == stagedFrom, "Staging a layer does not reload the packs");
+                    gui.applyPending();
+                    check(gui.pendingEdits() == 0, "Apply clears the staged batch");
                     next();
                     delay = 60;
                 }
@@ -193,8 +198,18 @@ public final class InventoryVerify {
                     check(
                             loads == page.previewLoads(),
                             "100 unchanged layouts do not decode another preview");
+                    int beforeReloads = gui.reloads();
+                    page.selectLayer(PACK_B);
+                    page.applyLayer();
                     page.selectLayer(PACK_A);
                     page.applyLayer();
+                    check(
+                            gui.pendingEdits() == 2,
+                            "Two applied layers wait for one shared reload");
+                    gui.applyPending();
+                    check(
+                            gui.reloads() == beforeReloads + 1,
+                            "A batch of edits costs a single reload");
                     next();
                     delay = 60;
                 }
@@ -318,6 +333,7 @@ public final class InventoryVerify {
                             "Audio-only pack is available without a sound definition");
                     page.selectLayer(PACK_B);
                     page.applyLayer();
+                    gui.applyPending();
                     next();
                     delay = 60;
                 }
@@ -539,6 +555,27 @@ public final class InventoryVerify {
                             serving(page.selectedAsset().location().getPath())
                                     .equals("file/ResourceManager-Edits"),
                             "Grouped local edits become the live provider after reload");
+                    next();
+                }
+                case 26 -> {
+                    page.setMode(0);
+                    var packs = page.layerPacks();
+                    check(!packs.isEmpty(), "Visuals mode offers at least one layer to stage");
+                    String pick = packs.contains("vanilla") ? "vanilla" : packs.get(0);
+                    page.selectLayer(pick);
+                    page.applyLayer();
+                    check(
+                            gui.pendingEdits() == 1,
+                            "A staged edit waits for the batch Apply button");
+                    shot = "readme-pending.png";
+                    next();
+                }
+                case 27 -> {
+                    int beforeReloads = gui.reloads();
+                    gui.applyPending();
+                    check(
+                            gui.reloads() == beforeReloads + 1,
+                            "Confirm reloads the packs exactly once");
                     next();
                 }
                 default -> finish(client);

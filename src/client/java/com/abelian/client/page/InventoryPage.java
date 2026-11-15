@@ -422,7 +422,8 @@ public final class InventoryPage {
         if (asset == null || pack.isEmpty()) return;
         if (mode == 0) {
             appearance.apply(host.config(), pack);
-            host.reloadPacks();
+            host.changed();
+            stage();
         } else if (mode == 1) {
             host.setTextOverride(subject.translationKey(), rawText);
             name.setValue(subject.name());
@@ -433,8 +434,15 @@ public final class InventoryPage {
                             pack,
                             catalog.soundDefinition(event(), pack),
                             catalog.audioFiles(event(), pack));
-            host.reloadPacks();
+            host.changed();
+            stage();
         }
+    }
+
+    /** Marks the row as pending and lets the player keep editing before one shared reload. */
+    private void stage() {
+        layers.setLayers(packRows, pack, appliedPack());
+        host.stageEdit();
     }
 
     private String event() {

@@ -28,9 +28,9 @@ public final class ResourceManagerScreen extends Screen {
     private final Map<AbstractWidget, UiField> fields = new IdentityHashMap<>();
     private InventoryPage inventory;
     private UiField search;
-    private UiButton reload, close;
+    private UiButton reload, applyAll, close;
     private ResourceIndex.Snapshot snapshot;
-    private int generation, scanToken;
+    private int generation, scanToken, pendingEdits, reloads;
     private boolean scanning, closed;
     private long saveAt, statusUntil;
     private String query = "", status = "";
@@ -52,6 +52,10 @@ public final class ResourceManagerScreen extends Screen {
                             this::setSearchQuery)
                             .setChrome(true);
             reload = addButton("resourcemanager.ui.reload", this::reloadPacks).setStyle(UiButton.Style.CHROME);
+            applyAll = addButton("resourcemanager.ui.action.apply", this::applyPending)
+                    .setStyle(UiButton.Style.PRIMARY);
+            applyAll.setTooltip(
+                    Component.translatable("resourcemanager.ui.action.apply.hint").getString());
             close = addButton("resourcemanager.ui.close", this::onClose).setStyle(UiButton.Style.CHROME);
             inventory = new InventoryPage(this);
             inventory.createWidgets();
@@ -101,6 +105,9 @@ public final class ResourceManagerScreen extends Screen {
 
     public void reloadPacks() {
         if (scanning) return;
+        pendingEdits = 0;
+        reloads++;
+        syncApplyButton();
         inventory.refreshAppearanceRules();
         save();
         scanning = true;
@@ -128,6 +135,39 @@ public final class ResourceManagerScreen extends Screen {
         saveAt = Util.getMillis() + 400;
     }
 
+    /**
+     * Records one change that only becomes visible in game after the next pack reload. Edits are
+     * staged so a batch of them costs a single reload instead of one per click.
+     */
+    public void stageEdit() {
+        pendingEdits++;
+        syncApplyButton();
+    }
+
+    public int pendingEdits() {
+        return pendingEdits;
+    }
+
+    public int reloads() {
+        return reloads;
+    }
+
+    /** Confirm: one reload for every staged edit. */
+    public void applyPending() {
+        if (pendingEdits == 0) return;
+        reloadPacks();
+    }
+
+    private void syncApplyButton() {
+        if (applyAll == null) return;
+        applyAll.active = pendingEdits > 0 && !scanning;
+        applyAll.setMessage(
+                pendingEdits > 0
+                        ? Component.translatable(
+                                "resourcemanager.ui.action.applyCount", pendingEdits)
+                        : Component.translatable("resourcemanager.ui.action.apply"));
+    }
+
     private void save() {
         saveAt = 0;
         config.save();
@@ -139,7 +179,11 @@ public final class ResourceManagerScreen extends Screen {
     }
 
     public String displayedStatus() {
-        return Util.getMillis() < statusUntil ? status : inventory.statusText();
+        if (Util.getMillis() < statusUntil) return status;
+        if (pendingEdits > 0)
+            return Component.translatable("resourcemanager.ui.status.pending", pendingEdits)
+                    .getString();
+        return inventory.statusText();
     }
 
     public ResourceManagerConfig config() {
@@ -241,10 +285,12 @@ public final class ResourceManagerScreen extends Screen {
     }
 
     private void layout() {
-        showWidget(search.widget(), 8, 6, Math.max(40, width - 132), 18);
+        showWidget(search.widget(), 8, 6, Math.max(40, width - 206), 18);
+        showWidget(applyAll, width - 190, 6, 62, 18);
         showWidget(reload, width - 122, 6, 74, 18);
         showWidget(close, width - 44, 6, 36, 18);
         reload.active = !scanning;
+        syncApplyButton();
         inventory.layout();
         if (getFocused() instanceof AbstractWidget widget && !widget.visible) setFocused(null);
     }
@@ -341,6 +387,7 @@ public final class ResourceManagerScreen extends Screen {
     @Override
     public void removed() {
         closed = true;
+        if (pendingEdits > 0) reloadPacks();
         save();
         PackSoundPreview.stop();
         preview.release();

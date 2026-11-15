@@ -29,7 +29,7 @@ its own layer, independently of the visual layer and of the other events.
 ## Pack layers
 
 Selecting an object lists the packs that actually provide part of it. Clicking a row only previews;
-**Use this layer** applies the choice and reloads resources in one step. The layer the game is using now
+**Use this layer** stages the choice; the chrome **Apply (N)** button reloads once for the whole batch. The layer the game is using now
 carries a green bar at its left edge.
 
 - Visuals switch as a whole, so a model can never end up drawn with another pack's texture.
