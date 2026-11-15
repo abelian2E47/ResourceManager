@@ -608,7 +608,7 @@ public final class InventoryPage {
         String name = Ui.trim(host.font(), subject.name(), textW);
         g.drawString(
                 host.font(),
-                Component.literal(name).withStyle(ChatFormatting.BOLD),
+                Component.literal(name),
                 textX,
                 y + 1,
                 UiColors.INK,
@@ -652,7 +652,7 @@ public final class InventoryPage {
         String event = event();
         g.drawString(
                 host.font(),
-                Component.literal(Ui.trim(host.font(), event, preview.w() - 12)).withStyle(ChatFormatting.BOLD),
+                Component.literal(Ui.trim(host.font(), event, preview.w() - 12)),
                 preview.x() + 6,
                 preview.y() + 6,
                 UiColors.INK,
